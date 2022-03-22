@@ -1,12 +1,13 @@
-var koa = require("koa");
-var app = new koa();
-const a = require("./lib").Hello;
+const koa = require("koa");
+const router = require("./router");
+const app = new koa();
 
-app.use(function* () {
-  this.body = "Hello, world!";
-});
+const { Hello, DB, address } = require("./lib");
+const hello = require("./lib/hello");
+
+app.use(router.routes()).use(router.allowedMethods());
+
 app.listen(8888, function () {
-  a.p();
-  console.log(a.name);
+  console.log(address);
   console.log("Server running on 8888");
 });

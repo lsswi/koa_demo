@@ -9,10 +9,16 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "koa": "^2.13.4"
+    "@koa/router": "^9.0.1",
+    "blueimp-md5": "^2.19.0",
+    "koa": "^2.13.4",
+    "mysql2": "^2.3.3",
+    "require-directory": "^2.1.1",
+    "sequelize": "^6.17.0"
   },
   "devDependencies": {
     "eslint": "^8.11.0",
+    "koa-router": "^10.1.1",
     "prettier": "2.6.0"
   }
 }
