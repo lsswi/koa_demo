@@ -1,24 +1,22 @@
 const ddd = {
   p() {
-    console.log("hello in p");
-    console.log("get header in p: ", this.req);
+    console.log('hello in p');
+    console.log('get header in p: ', this.req);
     function pt(objName) {
       this.obj_name = objName;
     }
-    pt.prototype.obj_name = "mmm";
-    let obj = new pt();
+    pt.prototype.obj_name = 'mmm';
     // obj.obj_name = "nnn";
-    console.log("obj:", obj.obj_name);
-    return "end in p";
+    return 'end in p';
   },
-  name: "nihao",
+  name: 'nihao',
 };
 
 const abc = () => {
   bbb();
-  console.log("im abc");
+  console.log('im abc');
   function bbb() {
-    console.log("im bbb");
+    console.log('im bbb');
   }
 };
 
@@ -34,6 +32,6 @@ module.exports = {
     return this.req;
   },
   tFunc() {
-    console.log("get req in tFunc: ", this.req);
+    console.log('get req in tFunc: ', this.req);
   },
 };

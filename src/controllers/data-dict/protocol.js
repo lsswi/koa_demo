@@ -1,8 +1,8 @@
-const DBLib = require("../../lib/mysql");
-const DBClient = DBLib.getDBPool();
+// const DBLib = require('../../lib/mysql');
+// const DBClient = DBLib.getDBPool();
 
 const TableInfo = {
-  TableProtocol: "data_dict_protocol",
+  TableProtocol: 'data_dict_protocol',
 };
 
 const Protocol = {
@@ -18,10 +18,10 @@ const Protocol = {
     console.log(params.name);
     console.log(params.proto_type);
     console.log(params.desc);
-    DBClient.query(querySql, {
-      replacements: { name: "abcd", val: str, key: mdKey },
-    });
-    return "ok";
+    // DBClient.query(querySql, {
+    // replacements: { name: 'abcd', val: str, key: mdKey },
+    // });
+    return 'ok';
   },
 
   /**

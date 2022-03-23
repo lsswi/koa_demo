@@ -18,4 +18,4 @@ const FieldVerification = {
   query() {},
 };
 
-moudle.exports = Event;
+module.exports = FieldVerification;

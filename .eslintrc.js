@@ -1,6 +1,6 @@
 module.exports = {
-  parser: "@babel/eslint-parser",
-  extends: ["@tencent/eslint-config-tencent", "eslint:recommended"],
+  parser: '@babel/eslint-parser',
+  extends: ['@tencent/eslint-config-tencent', 'eslint:recommended'],
   // plugins: ['babel'],
   globals: {
     // 全局变量 global 不允许被重新赋值
@@ -15,7 +15,7 @@ module.exports = {
   rules: {
     // 强制使用一致的缩进
     indent: [
-      "error",
+      'error',
       2,
       {
         // case 子句将相对于 switch 语句缩进 2 个空格
@@ -27,22 +27,22 @@ module.exports = {
     // 不强制使用一致的分号
     // 限制圈复杂度不超过 60
     complexity: [
-      "error",
+      'error',
       {
         max: 60,
       },
     ],
-    "max-len": ["warn", 1, 2],
-    "global-require": 0,
-    "import/no-dynamic-require": 0,
-    "no-underscore-dangle": 0,
+    'max-len': ['warn', 180, 2],
+    'global-require': 0,
+    'import/no-dynamic-require': 0,
+    'no-underscore-dangle': 0,
     camelcase: 0,
-    "no-console": 0,
-    "no-plusplus": 0,
-    "require-yield": 0,
-    "object-curly-newline": 0,
-    "no-param-reassign": 0,
-    "newline-per-chained-call": 0,
+    'no-console': 0,
+    'no-plusplus': 0,
+    'require-yield': 0,
+    'object-curly-newline': 0,
+    'no-param-reassign': 0,
+    'newline-per-chained-call': 0,
     semi: 2,
   },
 };

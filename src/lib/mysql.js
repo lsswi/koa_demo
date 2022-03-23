@@ -1,11 +1,11 @@
-const { Sequelize } = require("sequelize");
-const md5 = require("blueimp-md5");
+const { Sequelize } = require('sequelize');
+// const md5 = require('blueimp-md5');
 
 const DBLib = {
   getDBPool() {
-    return new Sequelize("data_dict", "root", "Lzymysql9787.", {
-      host: "localhost",
-      dialect: "mysql",
+    return new Sequelize('data_dict', 'root', 'Lzymysql9787.', {
+      host: 'localhost',
+      dialect: 'mysql',
       pool: {
         max: 5,
         min: 0,
@@ -13,7 +13,7 @@ const DBLib = {
       },
     });
   },
-  
+
   // async get() {
   //   let abc = {
   //     def_val: [

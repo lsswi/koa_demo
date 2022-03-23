@@ -8,17 +8,17 @@
  *
  * 1. 不支持文件名带空格, 2. 不包括routes/common目录
  */
-const Router = require("@koa/router");
-const requireDirectory = require("require-directory");
-const { isFunction, isPlainObject } = require("lodash");
+const Router = require('@koa/router');
+const requireDirectory = require('require-directory');
+const { isFunction, isPlainObject } = require('lodash');
 
-const PREFIX = "/node-cgi";
+const PREFIX = '/node-cgi';
 const router = new Router();
 
 function backTrack(obj, flatObj, prefixList = []) {
   Object.keys(obj).forEach((key) => {
     if (isFunction(obj[key])) {
-      const name = prefixList.concat([key]).join("/");
+      const name = prefixList.concat([key]).join('/');
       flatObj[name] = obj[key];
     }
 
@@ -40,7 +40,7 @@ class RouterManager {
    * @returns {Object}  拍平的对象 e.g. { demo: [AsyncFunction], cgiName: [AsyncFunction], 'dir/subDir/cgiName': [AsyncFunction] }
    */
   static getRoutes() {
-    const apiDirectory = "./routes";
+    const apiDirectory = './routes';
     const routes = requireDirectory(module, apiDirectory, {
       exclude(path) {
         if (/\/common\//.test(path)) {
