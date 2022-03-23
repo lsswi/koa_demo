@@ -1,5 +1,5 @@
 module.exports = {
   Hello: require("./hello.js"),
-  DB: require("./db.js"),
+  DB: require("./mysql.js"),
   address: "hz",
 };

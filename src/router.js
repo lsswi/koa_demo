@@ -65,7 +65,6 @@ class RouterManager {
           const result = await routes[cgiName](ctx, next);
 
           if (ctx.query.callback) {
-            // JSONP
             ctx.body = `${ctx.query.callback}(${JSON.stringify(result)})`;
           } else {
             ctx.body = result;

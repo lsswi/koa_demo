@@ -1,0 +1,63 @@
+Arguments: 
+  /usr/local/Cellar/node/17.6.0/bin/node /usr/local/bin/yarn
+
+PATH: 
+  /Users/joyyie/apache-maven-3.5.3/bin:/Library/Java/JavaVirtualMachines/jdk1.8.0_322.jdk/Contents/Home/bin:/usr/local/bin:/usr/local/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/joyyie/apache-maven-3.5.3/bin:/Library/Java/JavaVirtualMachines/jdk1.8.0_322.jdk/Contents/Home/bin:/usr/local/sbin:/Users/joyyie/Codes/go_proj/bin:/usr/local/go/bin:/usr/local/Cellar/scala/2.13.8/bin:/usr/local/spark/bin:/usr/local/Cellar/hadoop/3.3.1/sbin:/usr/local/Cellar/hadoop/3.3.1/bin:/Users/joyyie/Codes/go_proj/bin:/usr/local/go/bin:/usr/local/Cellar/scala/2.13.8/bin:/usr/local/spark/bin:/usr/local/Cellar/hadoop/3.3.1/sbin:/usr/local/Cellar/hadoop/3.3.1/bin
+
+Yarn version: 
+  1.22.18
+
+Node version: 
+  17.6.0
+
+Platform: 
+  darwin x64
+
+Trace: 
+  Error: https://registry.yarnpkg.com/@tencent%2feslint-config-tencent: Not found
+      at Request.params.callback [as _callback] (/usr/local/lib/node_modules/yarn/lib/cli.js:66138:18)
+      at Request.self.callback (/usr/local/lib/node_modules/yarn/lib/cli.js:140883:22)
+      at Request.emit (node:events:527:28)
+      at Request.<anonymous> (/usr/local/lib/node_modules/yarn/lib/cli.js:141855:10)
+      at Request.emit (node:events:527:28)
+      at IncomingMessage.<anonymous> (/usr/local/lib/node_modules/yarn/lib/cli.js:141777:12)
+      at Object.onceWrapper (node:events:641:28)
+      at IncomingMessage.emit (node:events:539:35)
+      at endReadableNT (node:internal/streams/readable:1342:12)
+      at processTicksAndRejections (node:internal/process/task_queues:83:21)
+
+npm manifest: 
+  {
+    "name": "koa_demo",
+    "version": "1.0.0",
+    "description": "",
+    "main": "index.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+      "@koa/router": "^9.0.1",
+      "blueimp-md5": "^2.19.0",
+      "koa": "^2.13.4",
+      "koa-body": "^4.2.0",
+      "mysql2": "^2.3.3",
+      "require-directory": "^2.1.1",
+      "sequelize": "^6.17.0"
+    },
+    "devDependencies": {
+      "eslint": "^7.32.0",
+      "eslint-plugin-babel": "^5.3.1",
+      "eslint-plugin-import": "^2.23.2",
+      "koa-router": "^10.1.1",
+      "prettier": "2.6.0",
+      "@tencent/eslint-config-tencent": "^0.13.0"
+    }
+  }
+
+yarn manifest: 
+  No manifest
+
+Lockfile: 
+  No lockfile
