@@ -1,86 +1,203 @@
-// const DBLib = require('../../lib/mysql');
-// const DBClient = DBLib.getDBPool();
+const DBLib = require('../../lib/mysql');
+const DBClient = DBLib.getDBPool();
+const { DateLib: { formatTime } } = require('../../utils/date');
 
 const TableInfo = {
   TableProtocol: 'data_dict_protocol',
+};
+const RetCode = {
+  OK: 0,
+  ParamError: 40001,
+  InternalDBError: 50000,
+};
+const RetMsg = {
+  OK: 'ok',
+  InternalDBError: 'internal db error',
 };
 
 const Protocol = {
   /**
    * 创建协议
    * @url /node-cgi/data-dict/event/create
-   * @param params {Object} 请求参数
-   * @return string
    */
-  Create(params) {
-    const querySql = `INSERT INTO ${TableInfo.TableProtocol}(name, proto_type, desc, operator) VALUES(:name, :protoType, :desc, 'joyyieli')`;
-    console.log(querySql);
-    console.log(params.name);
-    console.log(params.proto_type);
-    console.log(params.desc);
-    // DBClient.query(querySql, {
-    // replacements: { name: 'abcd', val: str, key: mdKey },
-    // });
-    return 'ok';
+  async Create(ctx) {
+    const params = ctx.request.body;
+    const ret = {
+      code: RetCode.OK,
+      msg: RetMsg.OK,
+    };
+    if (!checkCreateParam(params)) {
+      ret.code = RetCode.ParamError;
+      ret.msg = 'params error, param name, proto_type can not be null, category must be int array';
+      return ret;
+    }
+
+    const querySql = `INSERT INTO ${TableInfo.TableProtocol}(name, proto_type, category, \`desc\`, operator)
+      VALUES(:name, :protoType, :category, :desc, :operator)`;
+    await DBClient.query(querySql, {
+      replacements: {
+        name: params.name,
+        protoType: params.proto_type,
+        category: params.category.join(','),
+        desc: params.desc,
+        // operator: ctx.session.user.loginname,
+        operator: 'joyyieli',
+      },
+    }).then((res) => {
+      ret.data = {
+        id: res[0],
+      };
+    }).catch((err) => {
+      console.log(err);
+      ret.code = RetCode.InternalDBError;
+      ret.msg = RetMsg.InternalDBError;
+    });
+
+    return ret;
   },
 
   /**
    * 删除协议
    * @url /node-cgi/data-dict/event/delete
    */
-  Delete() {},
+  async Delete(ctx) {
+    const params = ctx.request.body;
+    const ret = {
+      code: RetCode.OK,
+      msg: RetMsg.OK,
+    };
+    if (!checkDeleteParam(params)) {
+      ret.code = RetCode.ParamError;
+      ret.msg = 'params error, param ids must be an int array';
+      return ret;
+    }
+    const querySql = `DELETE FROM ${TableInfo.TableProtocol} WHERE id IN (:ids)`;
+    await DBClient.query(querySql, { replacements: { ids: params.ids } }).then(() => {
+      ret.data = {
+        ids: params.ids,
+      };
+    }).catch((err) => {
+      console.log(err);
+      ret.code = RetCode.InternalDBError;
+      ret.msg = RetMsg.InternalDBError;
+    });
+    return ret;
+  },
 
   /**
    * 编辑协议
    * @url /node-cgi/data-dict/event/edit
    */
-  Edit() {},
+  async Edit(ctx) {
+    const params = ctx.request.body;
+    const ret = {
+      code: RetCode.OK,
+      msg: RetMsg.OK,
+    };
+    if (!checkEditParam(params)) {
+      ret.code = RetCode.ParamedError;
+      ret.msg = 'params error, param id, proto_type, name, desc, category can not be null';
+      return ret;
+    }
+    const querySql = `UPDATE ${TableInfo.TableProtocol} SET
+    name=:name,proto_type=:proto_type,category=:category,\`desc\`=:desc,operator=:operator WHERE id=:id`;
+    await DBClient.query(querySql, {
+      replacements: {
+        name: params.name,
+        proto_type: params.proto_type,
+        category: params.category.join(','),
+        desc: params.desc,
+        // operator: ctx.session.user.loginname,
+        operator: 'joyyieli',
+        id: params.id,
+      },
+    }).then(() => {
+      ret.data = {
+        id: params.id,
+      };
+    }).catch((err) => {
+      console.log(err);
+      ret.code = RetCode.InternalDBError;
+      ret.msg = RetMsg.InternalDBError;
+    });
+    return ret;
+  },
 
   /**
    * 查询协议
    * @url /node-cgi/data-dict/event/query
    */
-  Query() {},
+  async Query(ctx) {
+    const ret = {
+      code: RetCode.OK,
+      msg: RetMsg.OK,
+    };
+    const params = ctx.query;
+    initQueryParam(params);
+    let querySql = `SELECT * FROM ${TableInfo.TableProtocol} LIMIT :offset,:size`;
+    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableProtocol}`;
+    if (params.query !== '') {
+      querySql = `SELECT * FROM ${TableInfo.TableProtocol} WHERE id=:query OR name LIKE :name OR operator=:query LIMIT :offset,:size`;
+      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableProtocol} WHERE id=:query OR name LIKE :name OR operator=:query`;
+    }
+    const result = Promise.all([
+      DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: params.page - 1, size: params.size } }),
+      DBClient.query(countSql, { replacements: { query: params.query, name: `%${params.query}%` } }),
+    ]);
+    await result.then((values) => {
+      const queryResult = values[0][0];
+      const queryCount = values[1][0][0].cnt;
+      const list = [];
+      for (const proto of queryResult) {
+        list.push({
+          id: proto.id,
+          name: proto.name,
+          desc: proto.desc,
+          operator: proto.operator,
+          category: proto.category.split(','),
+          updated_time: formatTime(proto.updated_time),
+        });
+      }
+      ret.data = { list };
+      ret.total = queryCount;
+    }).catch((err) => {
+      ret.code = RetCode.InternalDBError,
+      ret.mgs = RetMsg.InternalDBError,
+      console.log(err);
+    });
+    return ret;
+  },
 };
 
-module.exports = Protocol;
+function checkCreateParam(params) {
+  if (params.name === undefined || params.proto_type === undefined || !Array.isArray(params.category)) {
+    return false;
+  }
+  return true;
+}
 
-// async get() {
-//   let abc = {
-//     def_val: [
-//       {
-//         id: 1,
-//         value: 2,
-//       },
-//     ],
-//   };
-//   let str = JSON.stringify(abc);
-//   console.log(str);
-//   let mdKey = md5(str);
-//   // INSERT INTO data_dict_event (name) VALUES("hi");
-//   // const [a, b] = await db.query("SELECT * FROM data_dict_event");
-//   await db
-//     // .query("DELETE FROM data_dict_event WHERE id=5")
-//     // .query("UPDATE data_dict_event SET name = 'hhh' WHERE name = :name", {
-//     // replacements: { name: name },
-//     // })
-//     .query(
-//       "INSERT INTO data_dict_event(proto_id, name, definition_val, md_key) VALUES(1, '测试', :val, :key)",
-//       {
-//         replacements: { name: "abcd", val: str, key: mdKey },
-//       }
-//     )
-//     // .query("SELECT * FROM data_dict_event WHERE md_key = :def", {
-//     //   replacements: { def: name },
-//     // })
-//     .then(([a, b]) => {
-//       console.log("get result a: ", a);
-//       console.log("get type of result a: ", typeof a);
-//       console.log("get result b: ", b);
-//       console.log("get type of result b: ", typeof b);
-//     })
-//     .catch((err) => {
-//       console.log(err.message);
-//     });
-//   console.log("done in get");
-// },
+function checkDeleteParam(params) {
+  if (!Array.isArray(params.ids)) {
+    return false;
+  }
+  return true;
+}
+
+function checkEditParam(params) {
+  if (params.id === undefined || params.proto_type === undefined || params.name === undefined
+    || params.desc === undefined || params.category === undefined) {
+    return false;
+  }
+  return true;
+}
+
+function initQueryParam(params) {
+  if (params.page === undefined || params.page === 0) {
+    params.page = 1;
+  }
+  if (params.size === undefined || params.size === 0) {
+    params.size = 10;
+  }
+}
+
+module.exports = Protocol;
