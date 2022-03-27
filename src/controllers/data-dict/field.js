@@ -19,7 +19,6 @@ const Field = {
       ret.msg = 'params error, proto_id, name, field_type, path, field_key can not be null';
       return ret;
     }
-    initCreateParam(params);
 
     // 先按协议+路径查重
     const checkSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableField} WHERE proto_id=:proto_id AND path=:path`;
@@ -47,10 +46,10 @@ const Field = {
         proto_id: params.proto_id,
         field_key: params.field_key,
         name: params.name,
-        desc: params.desc,
+        desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
         field_type: params.field_type,
         path: params.path,
-        remark: params.remark,
+        remark: Object.prototype.hasOwnProperty.call(params, 'remark') ? params.remark : '',
         // operator: ctx.session.user.loginname,
         operator: 'joyyieli',
       } })
@@ -155,10 +154,11 @@ const Field = {
     };
     if (!checkQueryParam(params)) {
       ret.code = Ret.CodeParamError;
-      ret.Msg = 'params error, proto_id can not be null';
+      ret.msg = 'params error, proto_id can not be null';
       return ret;
     }
-    initQueryParam(params);
+    const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
 
     let querySql = `SELECT * FROM ${TableInfo.TableField} LIMIT :offset,:size`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableField}`;
@@ -167,7 +167,7 @@ const Field = {
       countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableField} WHERE id=:query OR name LIKE :name OR operator=:query`;
     }
     const result = Promise.all([
-      DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: params.page - 1, size: params.size } }),
+      DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
       DBClient.query(countSql, { replacements: { query: params.query, name: `%${params.query}%` } }),
     ]);
     await result
@@ -230,25 +230,6 @@ function checkQueryParam(params) {
     return false;
   }
   return true;
-}
-
-// 可空字段没传初始化一下，否则insert的时候会报错
-function initCreateParam(params) {
-  if (params.desc === undefined) {
-    params.desc = '';
-  }
-  if (params.remark === undefined) {
-    params.remark = '';
-  }
-}
-
-function initQueryParam(params) {
-  if (params.page === undefined || params.page === 0) {
-    params.page = 1;
-  }
-  if (params.size === undefined || params.size === 0) {
-    params.size = 10;
-  }
 }
 
 module.exports = Field;

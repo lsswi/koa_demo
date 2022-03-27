@@ -20,7 +20,6 @@ const Protocol = {
       ret.msg = 'params error, param name, proto_type can not be null, category must be int array';
       return ret;
     }
-    initCreateParam(params);
 
     const querySql = `INSERT INTO ${TableInfo.TableProtocol}(name, proto_type, category, \`desc\`, operator)
       VALUES(:name, :protoType, :category, :desc, :operator)`;
@@ -29,7 +28,7 @@ const Protocol = {
         name: params.name,
         protoType: params.proto_type,
         category: params.category.join(','),
-        desc: params.desc,
+        desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
         // operator: ctx.session.user.loginname,
         operator: 'joyyieli',
       },
@@ -131,7 +130,8 @@ const Protocol = {
       msg: Ret.MsgOK,
     };
     const params = ctx.query;
-    initQueryParam(params);
+    const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
 
     let querySql = `SELECT * FROM ${TableInfo.TableProtocol} LIMIT :offset,:size`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableProtocol}`;
@@ -140,7 +140,7 @@ const Protocol = {
       countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableProtocol} WHERE id=:query OR name LIKE :name OR operator=:query`;
     }
     const result = Promise.all([
-      DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: params.page - 1, size: params.size } }),
+      DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
       DBClient.query(countSql, { replacements: { query: params.query, name: `%${params.query}%` } }),
     ]);
     await result
@@ -154,7 +154,7 @@ const Protocol = {
           list.push({
             id: proto.id,
             name: proto.name,
-            desc: proto.desc,
+            desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
             operator: proto.operator,
             category: proto.category.split(','),
             updated_time: formatTime(proto.updated_time),
@@ -192,22 +192,6 @@ function checkEditParam(params) {
     return false;
   }
   return true;
-}
-
-// 可空字段没传初始化一下，否则insert的时候会报错
-function initCreateParam(params) {
-  if (params.desc === undefined) {
-    params.desc = '';
-  }
-}
-
-function initQueryParam(params) {
-  if (params.page === undefined || params.page === 0) {
-    params.page = 1;
-  }
-  if (params.size === undefined || params.size === 0) {
-    params.size = 10;
-  }
 }
 
 module.exports = Protocol;
