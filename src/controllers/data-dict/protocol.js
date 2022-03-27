@@ -1,36 +1,26 @@
 const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
+const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
-
-const TableInfo = {
-  TableProtocol: 'data_dict_protocol',
-};
-const RetCode = {
-  OK: 0,
-  ParamError: 40001,
-  InternalDBError: 50000,
-};
-const RetMsg = {
-  OK: 'ok',
-  InternalDBError: 'internal db error',
-};
 
 const Protocol = {
   /**
    * 创建协议
    * @url /node-cgi/data-dict/event/create
    */
-  async Create(ctx) {
+  async create(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: RetCode.OK,
-      msg: RetMsg.OK,
+      code: Ret.CodeOK,
+      msg: Ret.MsgOK,
     };
+
     if (!checkCreateParam(params)) {
-      ret.code = RetCode.ParamError;
+      ret.code = Ret.CodeParamError;
       ret.msg = 'params error, param name, proto_type can not be null, category must be int array';
       return ret;
     }
+    initCreateParam(params);
 
     const querySql = `INSERT INTO ${TableInfo.TableProtocol}(name, proto_type, category, \`desc\`, operator)
       VALUES(:name, :protoType, :category, :desc, :operator)`;
@@ -43,15 +33,17 @@ const Protocol = {
         // operator: ctx.session.user.loginname,
         operator: 'joyyieli',
       },
-    }).then((res) => {
-      ret.data = {
-        id: res[0],
-      };
-    }).catch((err) => {
-      console.log(err);
-      ret.code = RetCode.InternalDBError;
-      ret.msg = RetMsg.InternalDBError;
-    });
+    })
+      .then((res) => {
+        ret.data = {
+          id: res[0],
+        };
+      })
+      .catch((err) => {
+        console.error(err);
+        ret.code = Ret.CodeInternalDBError;
+        ret.msg = Ret.MsgInternalDBError;
+      });
 
     return ret;
   },
@@ -60,27 +52,29 @@ const Protocol = {
    * 删除协议
    * @url /node-cgi/data-dict/event/delete
    */
-  async Delete(ctx) {
+  async delete(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: RetCode.OK,
-      msg: RetMsg.OK,
+      code: Ret.CodeOK,
+      msg: Ret.MsgOK,
     };
     if (!checkDeleteParam(params)) {
-      ret.code = RetCode.ParamError;
+      ret.code = Ret.CodeParamError;
       ret.msg = 'params error, param ids must be an int array';
       return ret;
     }
     const querySql = `DELETE FROM ${TableInfo.TableProtocol} WHERE id IN (:ids)`;
-    await DBClient.query(querySql, { replacements: { ids: params.ids } }).then(() => {
-      ret.data = {
-        ids: params.ids,
-      };
-    }).catch((err) => {
-      console.log(err);
-      ret.code = RetCode.InternalDBError;
-      ret.msg = RetMsg.InternalDBError;
-    });
+    await DBClient.query(querySql, { replacements: { ids: params.ids } })
+      .then(() => {
+        ret.data = {
+          ids: params.ids,
+        };
+      })
+      .catch((err) => {
+        console.error(err);
+        ret.code = Ret.CodeInternalDBError;
+        ret.msg = Ret.MsgInternalDBError;
+      });
     return ret;
   },
 
@@ -88,19 +82,21 @@ const Protocol = {
    * 编辑协议
    * @url /node-cgi/data-dict/event/edit
    */
-  async Edit(ctx) {
+  async edit(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: RetCode.OK,
-      msg: RetMsg.OK,
+      code: Ret.CodeOK,
+      msg: Ret.MsgOK,
     };
     if (!checkEditParam(params)) {
-      ret.code = RetCode.ParamedError;
+      ret.code = Ret.CodeParamError;
       ret.msg = 'params error, param id, proto_type, name, desc, category can not be null';
       return ret;
     }
+
     const querySql = `UPDATE ${TableInfo.TableProtocol} SET
-    name=:name,proto_type=:proto_type,category=:category,\`desc\`=:desc,operator=:operator WHERE id=:id`;
+      name=:name,proto_type=:proto_type,category=:category,\`desc\`=:desc,operator=:operator
+      WHERE id=:id`;
     await DBClient.query(querySql, {
       replacements: {
         name: params.name,
@@ -111,15 +107,17 @@ const Protocol = {
         operator: 'joyyieli',
         id: params.id,
       },
-    }).then(() => {
-      ret.data = {
-        id: params.id,
-      };
-    }).catch((err) => {
-      console.log(err);
-      ret.code = RetCode.InternalDBError;
-      ret.msg = RetMsg.InternalDBError;
-    });
+    })
+      .then(() => {
+        ret.data = {
+          id: params.id,
+        };
+      })
+      .catch((err) => {
+        console.error(err);
+        ret.code = Ret.CodeInternalDBError;
+        ret.msg = Ret.MsgInternalDBError;
+      });
     return ret;
   },
 
@@ -127,13 +125,14 @@ const Protocol = {
    * 查询协议
    * @url /node-cgi/data-dict/event/query
    */
-  async Query(ctx) {
+  async query(ctx) {
     const ret = {
-      code: RetCode.OK,
-      msg: RetMsg.OK,
+      code: Ret.CodeOK,
+      msg: Ret.MsgOK,
     };
     const params = ctx.query;
     initQueryParam(params);
+
     let querySql = `SELECT * FROM ${TableInfo.TableProtocol} LIMIT :offset,:size`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableProtocol}`;
     if (params.query !== '') {
@@ -144,27 +143,31 @@ const Protocol = {
       DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: params.page - 1, size: params.size } }),
       DBClient.query(countSql, { replacements: { query: params.query, name: `%${params.query}%` } }),
     ]);
-    await result.then((values) => {
-      const queryResult = values[0][0];
-      const queryCount = values[1][0][0].cnt;
-      const list = [];
-      for (const proto of queryResult) {
-        list.push({
-          id: proto.id,
-          name: proto.name,
-          desc: proto.desc,
-          operator: proto.operator,
-          category: proto.category.split(','),
-          updated_time: formatTime(proto.updated_time),
-        });
-      }
-      ret.data = { list };
-      ret.total = queryCount;
-    }).catch((err) => {
-      ret.code = RetCode.InternalDBError,
-      ret.mgs = RetMsg.InternalDBError,
-      console.log(err);
-    });
+    await result
+      .then((promiseRes) => {
+      // promiseALl返回两个查询的结果，sql返回的是两个元素的数组，内容基本一样，直接取第一个即可
+      // 参考 https://sequelize.org/v7/manual/raw-queries.html
+        const queryResult = promiseRes[0][0];
+        const queryCount = promiseRes[1][0][0].cnt;
+        const list = [];
+        for (const proto of queryResult) {
+          list.push({
+            id: proto.id,
+            name: proto.name,
+            desc: proto.desc,
+            operator: proto.operator,
+            category: proto.category.split(','),
+            updated_time: formatTime(proto.updated_time),
+          });
+        }
+        ret.data = { list };
+        ret.total = queryCount;
+      })
+      .catch((err) => {
+        ret.code = Ret.CodeInternalDBError,
+        ret.mgs = Ret.MsgInternalDBError,
+        console.error(err);
+      });
     return ret;
   },
 };
@@ -189,6 +192,13 @@ function checkEditParam(params) {
     return false;
   }
   return true;
+}
+
+// 可空字段没传初始化一下，否则insert的时候会报错
+function initCreateParam(params) {
+  if (params.desc === undefined) {
+    params.desc = '';
+  }
 }
 
 function initQueryParam(params) {

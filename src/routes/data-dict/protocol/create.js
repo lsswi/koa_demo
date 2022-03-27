@@ -5,5 +5,5 @@ module.exports = function (ctx) {
   // const params = ctx.query;
   // POST获取参数方式
   // console.log(ctx.request.body)
-  return Protocol.Create(ctx);
+  return Protocol.create(ctx);
 };
