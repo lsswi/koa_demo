@@ -2,7 +2,7 @@ const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
-const sequelize = require('sequelize');
+// const { Sequelize } = require('sequelize');
 
 const Event = {
   /**
@@ -21,7 +21,7 @@ const Event = {
       return ret;
     }
 
-    const t = new sequelize.Transaction();
+    const t = await DBClient.transaction();
     try {
       let event_id = 0;
       // 创建事件源数据
@@ -77,7 +77,38 @@ const Event = {
    * 删除事件
    * @url /node-cgi/data-dict/event/delete
    */
-  delete() {},
+  async delete(ctx) {
+    const ret = {
+      code: 0,
+      msg: 'ok',
+    };
+
+    // 事务demo
+    try {
+      await DBClient.transaction(async (transaction) => {
+        const res = await DBClient.query(
+          'INSERT INTO data_dict_rel_event_field_verification(event_id, field_verification_id) VALUES(100, 100)',
+          { transaction },
+        );
+
+        console.log('hahahahahahahahahah');
+        console.log(res);
+
+        const rt = await DBClient.query(
+          'INSERT INTO data_dict_rel_event_field_verification(event_id, field_verification_id) VALUES(11, 12)',
+          { transaction },
+        );
+
+        console.log('hhhhhhhhhhhhhhhhh');
+        console.log(rt);
+      });
+    } catch (e) {
+      console.log('---------------------');
+      // console.log(e);
+    }
+
+    return ret;
+  },
 
   /**
    * 编辑事件
