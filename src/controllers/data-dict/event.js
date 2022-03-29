@@ -139,9 +139,9 @@ const Event = {
       await DBClient.transaction(async (transaction) => {
         // 更新事件源数据
         const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
-        const updateSql = `UPDATE ${TableInfo.TABLE_EVENT} 
-          SET proto_id=:proto_id, category=:category, original_id=:original_id, name=:name, \`desc\`=:desc, definition_val=:definition_val, 
-          reporting_timing=:reporting_timing, status=:status, remark=:remark, operator=:operator 
+        const updateSql = `UPDATE ${TableInfo.TABLE_EVENT}
+          SET proto_id=:proto_id, category=:category, original_id=:original_id, name=:name, \`desc\`=:desc, definition_val=:definition_val, md_key=MD5(:definition_val),
+          reporting_timing=:reporting_timing, status=:status, remark=:remark, operator=:operator
           WHERE id=:id`;
         await DBClient.query(updateSql, {
           replacements: {
@@ -160,7 +160,7 @@ const Event = {
         });
 
         // 删除事件-字段校验规则关联
-        const deleteSql = `DELETE FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE id=:id`;
+        const deleteSql = `DELETE FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE event_id=:id`;
         await DBClient.query(deleteSql, {
           replacements: { id: params.id },
           transaction,
@@ -189,7 +189,18 @@ const Event = {
    * 查询事件
    * @url /node-cgi/data-dict/event/query
    */
-  async query() {},
+  async query(ctx) {
+    const params = ctx.query;
+    const ret = {
+      code: Ret.CODE_OK,
+      msg: Ret.MSG_OK,
+    };
+    if (!checkQueryParams(params)) {
+      ret.code = Ret.CODE_PARAM_ERROR,
+      ret.msg = 'params error, proto_id can not be null';
+      return ret;
+    }
+  },
 };
 
 function checkCreateParams(params) {
@@ -204,6 +215,13 @@ function checkEditParams(params) {
   if (params.id === undefined || params.proto_id === undefined || params.category === undefined || params.original_id === undefined || params.name === undefined
     || params.desc === undefined || params.definition_val === undefined || params.reporting_timing === undefined || params.status === undefined
     || params.remark === undefined || params.rule_list === undefined || !Array.isArray(params.rule_list)) {
+    return false;
+  }
+  return true;
+}
+
+function checkQueryParams(params) {
+  if (params.proto_id === undefined) {
     return false;
   }
   return true;

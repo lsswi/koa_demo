@@ -148,6 +148,7 @@ const Field = {
    */
   async query(ctx) {
     const params = ctx.query;
+    console.log(params.query);
     const ret = {
       code: Ret.CODE_OK,
       msg: Ret.MSG_OK,
@@ -157,23 +158,34 @@ const Field = {
       ret.msg = 'params error, proto_id can not be null';
       return ret;
     }
+    // 设置参数默认值
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
+    const query = Object.prototype.hasOwnProperty.call(params, 'query') ? params.query : '';
 
-    let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} LIMIT :offset,:size`;
-    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD}`;
-    if (params.query !== '') {
-      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE id=:query OR name LIKE :name OR operator=:query LIMIT :offset,:size`;
-      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE id=:query OR name LIKE :name OR operator=:query`;
+    let result = [];
+    let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id LIMIT :offset,:size`;
+    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id`;
+    if (query !== '') {
+      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT :offset,:size`;
+      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
+      result = Promise.all([
+        DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%`, offset: page - 1, size } }),
+        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%` } }),
+      ]);
+    } else {
+      result = Promise.all([
+        DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
+        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query } }),
+      ]);
     }
-    const result = Promise.all([
-      DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
-      DBClient.query(countSql, { replacements: { query: params.query, name: `%${params.query}%` } }),
-    ]);
     await result
       .then((promiseRes) => {
-        const queryResult = promiseRes[0][0];
-        const queryCount = promiseRes[1][0][0].cnt;
+        const [[queryResult], [[queryCount]]] = promiseRes;
+        // const queryResult = promiseRes[0][0];
+        // const queryCount = promiseRes[1][0][0].cnt;
+        console.log(queryResult);
+        console.log(queryCount);
         const list = [];
         for (const field of queryResult) {
           list.push({
@@ -191,7 +203,7 @@ const Field = {
           });
         }
         ret.data = { list };
-        ret.total = queryCount;
+        ret.total = queryCount.cnt;
       })
       .catch((err) => {
         console.error(err);

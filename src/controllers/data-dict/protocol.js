@@ -132,23 +132,33 @@ const Protocol = {
     const params = ctx.query;
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
+    const query = Object.prototype.hasOwnProperty.call(params, 'query') ? params.query : '';
 
+    let result = [];
     let querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL} LIMIT :offset,:size`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL}`;
-    if (params.query !== '') {
+    if (query !== '') {
       querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL} WHERE id=:query OR name LIKE :name OR operator=:query LIMIT :offset,:size`;
       countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL} WHERE id=:query OR name LIKE :name OR operator=:query`;
+      result = Promise.all([
+        DBClient.query(querySql, { replacements: { query, name: `%${params.query}%`, offset: page - 1, size } }),
+        DBClient.query(countSql, { replacements: { query, name: `%${params.query}%` } }),
+      ]);
+    } else {
+      result = Promise.all([
+        DBClient.query(querySql, { replacements: { offset: page - 1, size } }),
+        DBClient.query(countSql),
+      ]);
     }
-    const result = Promise.all([
-      DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
-      DBClient.query(countSql, { replacements: { query: params.query, name: `%${params.query}%` } }),
-    ]);
     await result
       .then((promiseRes) => {
       // promiseALl返回两个查询的结果，sql返回的是两个元素的数组，内容基本一样，直接取第一个即可
       // 参考 https://sequelize.org/v7/manual/raw-queries.html
-        const queryResult = promiseRes[0][0];
-        const queryCount = promiseRes[1][0][0].cnt;
+        // const queryResult = promiseRes[0][0];
+        // const queryCount = promiseRes[1][0][0].cnt;
+        console.log(promiseRes);
+        const [[queryResult], [[queryCount]]] = promiseRes;
+        console.log(queryCount);
         const list = [];
         for (const proto of queryResult) {
           list.push({
@@ -156,12 +166,12 @@ const Protocol = {
             name: proto.name,
             desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
             operator: proto.operator,
-            category: proto.category.split(','),
+            category: proto.category.split(',').map(id => parseInt(id, 10)),
             updated_time: formatTime(proto.updated_time),
           });
         }
         ret.data = { list };
-        ret.total = queryCount;
+        ret.total = queryCount.cnt;
       })
       .catch((err) => {
         ret.code = Ret.CODE_INTERNAL_DB_ERROR,
