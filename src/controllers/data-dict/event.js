@@ -202,17 +202,26 @@ const Event = {
     }
     // 设置参数默认值
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
+    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
 
-    // SELECT * FROM event WHERE proto_id=x AND category=x AND (id=:query OR name LIKE :name OR operator=:query OR definition_val LIKE :name)
+    /**
+     * SELECT t2.*, t1.id as sub_id, t1.desc as sub_desc, t1.updated_time as sub_time FROM (
+		 *   SELECT * FROM data_dict_event
+		 *     WHERE proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
+		 *     LIMIT 0, 3
+	   * ) t2
+	   * LEFT JOIN data_dict_event t1 ON t1.original_id=t2.id order by t2.id;
+     */
+    let querySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
+    /**
+     * SELECT COUNT(*) as cnt FROM data_dict_event
+     *   WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
+     */
+    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
+
     let result = [];
-    let querySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE proto_id=:proto_id`;
-    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE proto_id=:proto_id`;
-
     const replacements = {
       proto_id: params.proto_id,
-      offset: page - 1,
-      size,
     };
 
     if (params.category !== undefined) {
@@ -222,35 +231,76 @@ const Event = {
     }
 
     if (params.query !== undefined && params.query !== '') {
-      querySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT :offset, :size';
+      querySql += ` AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT ${(page - 1) * size}, ${size}`;
       countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
       replacements.query = params.query;
       replacements.fuzzyQuery = `%${params.query}%`;
     }
-    querySql += ' LIMIT :offset, :size';
 
+    const fatherSql = `SELECT t2.*, t1.id as sub_id, t1.desc as sub_desc, t1.updated_time as sub_time, t1.operator as sub_operator
+      FROM(${querySql}) t2
+      LEFT JOIN ${TableInfo.TABLE_EVENT} t1 ON t1.original_id=t2.id ORDER BY t2.id`;
     result = Promise.all([
-      DBClient.query(querySql, { replacements }),
+      DBClient.query(fatherSql, { replacements }),
       DBClient.query(countSql, { replacements }),
     ]);
 
     await result.then((promiseRes) => {
       const [[queryResult], [[queryCount]]] = promiseRes;
-      console.log(queryResult);
-      console.log(queryCount.cnt);
+      // 构造original_id=0数据+sub数据的数组内容
+      // 因为是left join，所以每个id第一条数据如果是undefined，说明只有本身一条数据；如果第一条不为undefined数据，说明至少有包含自身的2条或以上数据
+      const list = [];
+      const idMap = new Map();
+      for (const event of queryResult) {
+        if (idMap.get(event.id) === undefined) {
+          const tmpObj = {
+            id: event.id,
+            proto_id: event.proto_id,
+            category: event.category,
+            name: event.name,
+            desc: event.desc,
+            definition_val: event.definition_val,
+            reporting_timing: event.reporting_timing,
+            operator: event.operator,
+            updated_time: formatTime(event.updated_time),
+            sub: [],
+          };
+          if (event.sub_id !== null) {
+            tmpObj.sub.push({
+              id: event.sub_id,
+              desc: event.sub_desc,
+              operator: event.sub_operator,
+              updated_time: formatTime(event.sub_time),
+            });
+          }
+          idMap.set(event.id, tmpObj);
+        } else {
+          idMap.get(event.id).sub.push({
+            id: event.sub_id,
+            desc: event.sub_desc,
+            operator: event.sub_operator,
+            updated_time: formatTime(event.sub_time),
+          });
+        }
+      }
+
+      // 按查询出来的顺序塞进返回的数组里，去重一下
+      const idSet = new Set();
+      for (const event of queryResult) {
+        if (!idSet.has(event.id)) {
+          list.push(idMap.get(event.id));
+          idSet.add(event.id);
+        }
+      }
+      ret.data = { list, total: queryCount.cnt };
+      console.log(list);
+    }).catch((err) => {
+      console.error(err);
+      ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+      ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
     });
 
-    // if (query !== '') {
-    //   result = Promise.all([
-    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%`, offset: page - 1, size } }),
-    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%` } }),
-    //   ]);
-    // } else {
-    //   result = Promise.all([
-    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
-    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query } }),
-    //   ]);
-    // }
+    return ret;
   },
 };
 
