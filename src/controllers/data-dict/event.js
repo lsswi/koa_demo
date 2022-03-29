@@ -200,6 +200,57 @@ const Event = {
       ret.msg = 'params error, proto_id can not be null';
       return ret;
     }
+    // 设置参数默认值
+    const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
+
+    // SELECT * FROM event WHERE proto_id=x AND category=x AND (id=:query OR name LIKE :name OR operator=:query OR definition_val LIKE :name)
+    let result = [];
+    let querySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE proto_id=:proto_id`;
+    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE proto_id=:proto_id`;
+
+    const replacements = {
+      proto_id: params.proto_id,
+      offset: page - 1,
+      size,
+    };
+
+    if (params.category !== undefined) {
+      querySql += ' AND category=:category';
+      countSql += ' AND category=:category';
+      replacements.category = params.category;
+    }
+
+    if (params.query !== undefined && params.query !== '') {
+      querySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT :offset, :size';
+      countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
+      replacements.query = params.query;
+      replacements.fuzzyQuery = `%${params.query}%`;
+    }
+    querySql += ' LIMIT :offset, :size';
+
+    result = Promise.all([
+      DBClient.query(querySql, { replacements }),
+      DBClient.query(countSql, { replacements }),
+    ]);
+
+    await result.then((promiseRes) => {
+      const [[queryResult], [[queryCount]]] = promiseRes;
+      console.log(queryResult);
+      console.log(queryCount.cnt);
+    });
+
+    // if (query !== '') {
+    //   result = Promise.all([
+    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%`, offset: page - 1, size } }),
+    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%` } }),
+    //   ]);
+    // } else {
+    //   result = Promise.all([
+    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
+    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query } }),
+    //   ]);
+    // }
   },
 };
 

@@ -156,9 +156,7 @@ const Protocol = {
       // 参考 https://sequelize.org/v7/manual/raw-queries.html
         // const queryResult = promiseRes[0][0];
         // const queryCount = promiseRes[1][0][0].cnt;
-        console.log(promiseRes);
         const [[queryResult], [[queryCount]]] = promiseRes;
-        console.log(queryCount);
         const list = [];
         for (const proto of queryResult) {
           list.push({
