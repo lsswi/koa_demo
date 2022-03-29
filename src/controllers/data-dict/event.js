@@ -22,7 +22,6 @@ const Event = {
 
     // 先检查是否有重复的定义，只有original_id=0的时候才检查，original_id != 0 是原始数据的子版本，允许定义重复
     params.original_id = Object.prototype.hasOwnProperty.call(params, 'original_id') ? params.original_id : 0;
-    console.log(params.definition_val);
     const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
     if (params.original_id === 0) {
       const checkSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE md_key=MD5(:def_val)`;
@@ -132,8 +131,58 @@ const Event = {
     };
     if (!checkEditParams(params)) {
       ret.code = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params errors, '
-    };
+      ret.msg = 'params errors, proto_id, category, original_id, name, desc, definition_val, reporting_timing, status, remark, rule_list can not be null';
+      return ret;
+    }
+
+    try {
+      await DBClient.transaction(async (transaction) => {
+        // 更新事件源数据
+        const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
+        const updateSql = `UPDATE ${TableInfo.TABLE_EVENT} 
+          SET proto_id=:proto_id, category=:category, original_id=:original_id, name=:name, \`desc\`=:desc, definition_val=:definition_val, 
+          reporting_timing=:reporting_timing, status=:status, remark=:remark, operator=:operator 
+          WHERE id=:id`;
+        await DBClient.query(updateSql, {
+          replacements: {
+            proto_id: params.proto_id,
+            category: params.category,
+            original_id: params.original_id,
+            name: params.name,
+            desc: params.desc,
+            definition_val: defJsonFormat,
+            reporting_timing: params.reporting_timing,
+            status: params.status,
+            remark: params.remark,
+            operator: 'joyyieli',
+            id: params.id,
+          },
+        });
+
+        // 删除事件-字段校验规则关联
+        const deleteSql = `DELETE FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE id=:id`;
+        await DBClient.query(deleteSql, {
+          replacements: { id: params.id },
+          transaction,
+        });
+
+        // 新建事件-字段校验规则关联
+        const insertValue = [];
+        const insertRelSql = `INSERT INTO ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION}(event_id, field_verification_id) VALUES`;
+        for (const rule_id of params.rule_list.filter(Number.isFinite)) {
+          insertValue.push(`(${params.id}, ${rule_id})`);
+        }
+        if (insertValue.length > 0) {
+          await DBClient.query(insertRelSql + insertValue.join(','), { transaction });
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+      ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
+    }
+
+    return ret;
   },
 
   /**
@@ -152,7 +201,7 @@ function checkCreateParams(params) {
 }
 
 function checkEditParams(params) {
-  if (params.proto_id === undefined || params.category === undefined || params.original === undefined || params.name === undefined
+  if (params.id === undefined || params.proto_id === undefined || params.category === undefined || params.original_id === undefined || params.name === undefined
     || params.desc === undefined || params.definition_val === undefined || params.reporting_timing === undefined || params.status === undefined
     || params.remark === undefined || params.rule_list === undefined || !Array.isArray(params.rule_list)) {
     return false;
