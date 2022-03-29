@@ -18,6 +18,7 @@ async function func(ctx, next) {
     case 'query':
       result = await Event.query(ctx);
       break;
+    // TODO 欠一个根据事件ID获取详情信息+绑定字段规则接口（编辑用）
     default:
       break;
   }

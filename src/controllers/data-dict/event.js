@@ -304,6 +304,8 @@ const Event = {
   },
 };
 
+// TODO 欠一个根据事件ID获取详情信息+绑定字段规则接口（编辑用）
+
 function checkCreateParams(params) {
   if (params.proto_id === undefined || params.category === undefined || params.name === undefined || params.definition_val === undefined
     || params.rule_list === undefined || !Array.isArray(params.rule_list)) {
