@@ -15,6 +15,9 @@ const TableInfo = {
   TABLE_EVENT: 'data_dict_event',
   TABLE_MEDIA: 'data_dict_media',
   TABLE_FIELD_VERIFICATION: 'data_dict_field_verification',
+  TABLE_REL_MEDIA_EVENT: 'data_dict_rel_media_event',
+  TABLE_REL_MEDIA_FIELD_VERIFICATION: 'data_dict_rel_media_field_verification',
+  TABLE_REL_EVENT_FIELD_VERIFICATION: 'data_dict_rel_event_field_verification',
 };
 
 module.exports = { Ret, TableInfo };
