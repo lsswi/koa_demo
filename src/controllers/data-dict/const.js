@@ -1,19 +1,20 @@
 const Ret = {
-  CodeOK: 0,
-  CodeParamError: 40001,
-  CodeExisted: 40002,
-  CodeInternalDBError: 50000,
+  CODE_OK: 0,
+  CODE_PARAM_ERROR: 40001,
+  CODE_EXISTED: 40002,
+  CODE_NOT_EXISTED: 40003,
+  CODE_INTERNAL_DB_ERROR: 50000,
 
-  MsgOK: 'ok',
-  MsgInternalDBError: 'internal db error',
+  MSG_OK: 'ok',
+  MSG_INTERNAL_DB_ERROR: 'internal db error',
 };
 
 const TableInfo = {
-  TableProtocol: 'data_dict_protocol',
-  TableField: 'data_dict_field',
-  TableEvent: 'data_dict_event',
-  TableMedia: 'data_dict_media',
-  TableFieldVerification: 'data_dict_field_verification',
+  TABLE_PROTOCOL: 'data_dict_protocol',
+  TABLE_FIELD: 'data_dict_field',
+  TABLE_EVENT: 'data_dict_event',
+  TABLE_MEDIA: 'data_dict_media',
+  TABLE_FIELD_VERIFICATION: 'data_dict_field_verification',
 };
 
 module.exports = { Ret, TableInfo };

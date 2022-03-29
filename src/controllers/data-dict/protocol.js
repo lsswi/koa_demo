@@ -11,17 +11,17 @@ const Protocol = {
   async create(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: Ret.CodeOK,
-      msg: Ret.MsgOK,
+      code: Ret.CODE_OK,
+      msg: Ret.MSG_OK,
     };
 
-    if (!checkCreateParam(params)) {
-      ret.code = Ret.CodeParamError;
+    if (!checkCreateParams(params)) {
+      ret.code = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, param name, proto_type can not be null, category must be int array';
       return ret;
     }
 
-    const querySql = `INSERT INTO ${TableInfo.TableProtocol}(name, proto_type, category, \`desc\`, operator)
+    const querySql = `INSERT INTO ${TableInfo.TABLE_PROTOCOL}(name, proto_type, category, \`desc\`, operator)
       VALUES(:name, :protoType, :category, :desc, :operator)`;
     await DBClient.query(querySql, {
       replacements: {
@@ -40,8 +40,8 @@ const Protocol = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CodeInternalDBError;
-        ret.msg = Ret.MsgInternalDBError;
+        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
 
     return ret;
@@ -54,25 +54,25 @@ const Protocol = {
   async delete(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: Ret.CodeOK,
-      msg: Ret.MsgOK,
+      code: Ret.CODE_OK,
+      msg: Ret.MSG_OK,
     };
-    if (!checkDeleteParam(params)) {
-      ret.code = Ret.CodeParamError;
+    if (!checkDeleteParams(params)) {
+      ret.code = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, param ids must be an int array';
       return ret;
     }
-    const querySql = `DELETE FROM ${TableInfo.TableProtocol} WHERE id IN (:ids)`;
-    await DBClient.query(querySql, { replacements: { ids: params.ids } })
+
+    const ids = params.ids.filter(Number.isFinite);
+    const querySql = `DELETE FROM ${TableInfo.TABLE_PROTOCOL} WHERE id IN (:ids)`;
+    await DBClient.query(querySql, { replacements: { ids } })
       .then(() => {
-        ret.data = {
-          ids: params.ids,
-        };
+        ret.data = { ids };
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CodeInternalDBError;
-        ret.msg = Ret.MsgInternalDBError;
+        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
   },
@@ -84,16 +84,16 @@ const Protocol = {
   async edit(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: Ret.CodeOK,
-      msg: Ret.MsgOK,
+      code: Ret.CODE_OK,
+      msg: Ret.MSG_OK,
     };
-    if (!checkEditParam(params)) {
-      ret.code = Ret.CodeParamError;
+    if (!checkEditParams(params)) {
+      ret.code = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, param id, proto_type, name, desc, category can not be null';
       return ret;
     }
 
-    const querySql = `UPDATE ${TableInfo.TableProtocol} SET
+    const querySql = `UPDATE ${TableInfo.TABLE_PROTOCOL} SET
       name=:name,proto_type=:proto_type,category=:category,\`desc\`=:desc,operator=:operator
       WHERE id=:id`;
     await DBClient.query(querySql, {
@@ -114,8 +114,8 @@ const Protocol = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CodeInternalDBError;
-        ret.msg = Ret.MsgInternalDBError;
+        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
   },
@@ -126,18 +126,18 @@ const Protocol = {
    */
   async query(ctx) {
     const ret = {
-      code: Ret.CodeOK,
-      msg: Ret.MsgOK,
+      code: Ret.CODE_OK,
+      msg: Ret.MSG_OK,
     };
     const params = ctx.query;
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
 
-    let querySql = `SELECT * FROM ${TableInfo.TableProtocol} LIMIT :offset,:size`;
-    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableProtocol}`;
+    let querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL} LIMIT :offset,:size`;
+    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL}`;
     if (params.query !== '') {
-      querySql = `SELECT * FROM ${TableInfo.TableProtocol} WHERE id=:query OR name LIKE :name OR operator=:query LIMIT :offset,:size`;
-      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TableProtocol} WHERE id=:query OR name LIKE :name OR operator=:query`;
+      querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL} WHERE id=:query OR name LIKE :name OR operator=:query LIMIT :offset,:size`;
+      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL} WHERE id=:query OR name LIKE :name OR operator=:query`;
     }
     const result = Promise.all([
       DBClient.query(querySql, { replacements: { query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
@@ -164,29 +164,29 @@ const Protocol = {
         ret.total = queryCount;
       })
       .catch((err) => {
-        ret.code = Ret.CodeInternalDBError,
-        ret.mgs = Ret.MsgInternalDBError,
+        ret.code = Ret.CODE_INTERNAL_DB_ERROR,
+        ret.mgs = Ret.MSG_INTERNAL_DB_ERROR,
         console.error(err);
       });
     return ret;
   },
 };
 
-function checkCreateParam(params) {
+function checkCreateParams(params) {
   if (params.name === undefined || params.proto_type === undefined || !Array.isArray(params.category)) {
     return false;
   }
   return true;
 }
 
-function checkDeleteParam(params) {
+function checkDeleteParams(params) {
   if (!Array.isArray(params.ids)) {
     return false;
   }
   return true;
 }
 
-function checkEditParam(params) {
+function checkEditParams(params) {
   if (params.id === undefined || params.proto_type === undefined || params.name === undefined
     || params.desc === undefined || params.category === undefined) {
     return false;
