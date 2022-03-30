@@ -330,4 +330,81 @@ function checkQueryParams(params) {
   return true;
 }
 
+function a() {
+  fatherResult = SELECT * FROM event WHERE xxx limit x,x
+  childrenResult = SELECT * FROM event WHERE original_id IN (:fatherids)
+
+  // allEID -> father,children的id全部都取出来，后面取字段用
+  // eventInfoMap -> event_id和具体信息的映射，后面构造每个event的结构用
+  // fatherSubMap -> fatherID都有哪些children_id的映射，后面构造每个event的father+sub结构用
+  let allEID = [];
+  for (const res of fatherResult) {
+    allEID.push(res.id);
+    eventInfoMap[res.id] = res
+  }
+  for (const res of childrenResult) {
+    allEID.push(res.id);
+    eventInfoMap[res.id] = res
+
+    // 建立father_id有哪些sub_id的map[father_id][]int
+    if (fatherSubMap.get(res.original_id) === undefined) {
+      fatherSubMap[res.id].set(res.original_id, int[res.id])
+    } else {
+      fatherSubMap[res.id].get(res.original_id).push(res.id)
+    }
+  }
+
+  // mapObj 每个event_id和具体返回结构的映射，包含字段信息，类似下面结构
+  /**
+   * {
+   *    "name": "event",
+   *    "fields": [
+   *      {
+   *        "field_verification_id": 1,
+   *        "field_name": "操作系统",
+   *        "rule_id": 1
+   *      },
+   *      {
+   *        "field_verification_id": 2,
+   *        "field_name": "包名",
+   *        "rule_id": 3
+   *      }
+   *    ]
+   * }
+   */
+  verificationResult = SELECT * FROM (SELECT * FROM rel_e_f_v WHERE event_id IN allEID) t1 LEFT JOIN field_verification t2 ON t1.field_verification_id = t2.id LEFT JOIN field t3 ON t2.field_id=t3.id;
+  // 构造每个event的所有字段
+  for (const rule of verificationResult) {
+    if (mapObj.get(rule.event_id) === undefined) {
+      if (fatherSubMap.get(rule.event_id)) {
+        mapObj.set(rule.event_id, {
+          "name": eventInfoMap[rule.event_id];
+          ....
+          "field_list": [{"field_verification_id": rule.field_id, "rule_id": rule.key, "field_name": rule.field_name}]
+        })
+      } else {
+        // 如果只是子版本，只需要一些desc等不同的信息
+        mapObj.set(rule.event_id, {
+         "desc": eventInfoMap[rule.event_id];
+         "field_list": [{"field_verification_id": rule.field_id, "rule_id": rule.key, "field_name": rule.field_name}]
+        })
+      }
+    } else {
+      mapObj.get(rule.event_id).field_list.push({"field_id": rule.field_id, "field_value": rule.key})
+    }
+  }
+
+  // 构造每个event的father+sub结构
+  const list = [];
+  for (const result of father_result) {
+    let arr = [];
+    // 取出father_id所有的sub_id
+    for (const sub_id of mapFatherSubID[result.id]) {
+      arr.push(mpObj[sub_id]);
+    }
+    mapObj[result_id].children = arr;
+    list.push(mapObj[result_id]);
+  }
+}
+
 module.exports = Event;
