@@ -9,9 +9,6 @@ async function func(ctx, next) {
     case 'create':
       result = await Field.create(ctx);
       break;
-    case 'edit':
-      result = await Field.edit(ctx);
-      break;
     case 'delete':
       result = await Field.delete(ctx);
       break;

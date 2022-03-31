@@ -6,10 +6,7 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 const Field = {
   /**
    * TODO
-   * 1. 合并创建和编辑
-   * 2. 删除字段接口要额外删除verification表里和rel表里的关系
-   * 3. 删除软删
-   * 4. 查询加上is_deleted=0条件
+   * 1. 查询加上is_deleted=0条件，改数据query返回的数据结构
    */
 
   /**
@@ -28,50 +25,20 @@ const Field = {
       return ret;
     }
 
-    // 先按协议+路径查重
-    const checkSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id AND path=:path`;
-    await DBClient.query(checkSql, { replacements: { proto_id: params.proto_id, path: params.path } })
-      .then((res) => {
-        if (res[0][0].cnt > 0) {
-          ret.ret = Ret.CODE_EXISTED,
-          ret.msg = `field path ${params.path} has existed`;
-        }
-      })
-      .catch((err) => {
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-        console.error(err);
-      });
-
-    if (ret.ret !== Ret.CODE_OK) {
-      return ret;
+    try {
+      if (params.id) {
+        await updateField(params);
+      } else {
+        // 先按协议+路径查重
+        await checkFieldRepetition(params);
+        const id = await insertField(params);
+        ret.data = { id };
+      }
+    } catch (err) {
+      if (err.ret) return err;
+      console.error(err);
+      return { ret: Ret.CODE_UNKNOWN, err: Ret.MSG_UNKNOWN };
     }
-
-    const querySql = `INSERT INTO ${TableInfo.TABLE_FIELD}(proto_id, field_key, name, \`desc\`, field_type, path, remark, operator)
-      VALUES(:proto_id, :field_key, :name, :desc, :field_type, :path, :remark, :operator)`;
-    await DBClient.query(querySql, {
-      replacements: {
-        proto_id: params.proto_id,
-        field_key: params.field_key,
-        name: params.name,
-        desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
-        field_type: params.field_type,
-        path: params.path,
-        remark: Object.prototype.hasOwnProperty.call(params, 'remark') ? params.remark : '',
-        // operator: ctx.session.user.loginname,
-        operator: 'joyyieli',
-      } })
-      .then((res) => {
-        ret.data = {
-          id: res[0],
-        };
-      })
-      .catch((err) => {
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-        console.error(err);
-      });
-
     return ret;
   },
 
@@ -91,62 +58,47 @@ const Field = {
       return ret;
     }
 
-    const ids = params.ids.filter(Number.isFinite);
-    const querySql = `DELETE FROM ${TableInfo.TABLE_FIELD} WHERE id IN (:ids)`;
-    await DBClient.query(querySql, { replacements: { ids } })
-      .then((res) => {
-        console.log(res);
-        ret.data = { ids };
-      })
-      .catch((err) => {
-        console.error(err);
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-      });
-    return ret;
-  },
+    try {
+      await DBClient.transaction(async (transaction) => {
+        const ids = params.ids.filter(Number.isFinite);
+        // 删除字段数据源
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_FIELD} SET is_deleted=1 WHERE id IN (:ids)`, {
+          replacements: { ids },
+          transaction,
+        });
 
-  /**
-   * 编辑字段
-   * @url /node-cgi/data-dict/field/edit
-   */
-  async edit(ctx) {
-    const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
-    if (!checkEditParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, id, proto_id, field_key, name, desc, field_type, path, remark can not be null';
-      return ret;
+        // 查出所有关联的校验规则id
+        const [idResult] = await DBClient.query(`SELECT id FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE field_id IN (:ids)`, {
+          replacements: { ids },
+        });
+        const verificationIDList = [];
+        for (const idObj of idResult) {
+          verificationIDList.push(idObj.id);
+        }
+
+        // 删field_verification表
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_id IN (:ids)`, {
+          replacements: { ids },
+          transaction,
+        });
+
+        // 删rel_media_field_verification表
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+          replacements: { ids: verificationIDList },
+          transaction,
+        });
+
+        // 删rel_event_field_verification表
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+          replacements: { ids: verificationIDList },
+          transaction,
+        });
+      });
+    } catch (err) {
+      console.error(err);
+      return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
     }
 
-    const querySql = `UPDATE ${TableInfo.TABLE_FIELD}
-      SET proto_id=:proto_id, field_key=:field_key, name=:name, \`desc\`=:desc, field_type=:field_type, path=:path, remark=:remark
-      WHERE id=:id`;
-    await DBClient.query(querySql, {
-      replacements: {
-        proto_id: params.proto_id,
-        field_key: params.field_key,
-        name: params.name,
-        desc: params.desc,
-        field_type: params.field_type,
-        path: params.path,
-        remark: params.remark,
-        id: params.id,
-      },
-    })
-      .then(() => {
-        ret.data = {
-          id: params.id,
-        };
-      })
-      .catch((err) => {
-        console.error(err);
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-      });
     return ret;
   },
 
@@ -169,31 +121,26 @@ const Field = {
     // 设置参数默认值
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
-    const query = Object.prototype.hasOwnProperty.call(params, 'query') ? params.query : '';
 
     let result = [];
     let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id LIMIT :offset,:size`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id`;
-    if (query !== '') {
-      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT :offset,:size`;
-      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
+    if (params.query !== '' && params.query !== undefined) {
+      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT :offset,:size`;
+      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
       result = Promise.all([
-        DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%`, offset: page - 1, size } }),
-        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query, name: `%${params.query}%` } }),
+        DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
+        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%` } }),
       ]);
     } else {
       result = Promise.all([
         DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
-        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query } }),
+        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query } }),
       ]);
     }
     await result
       .then((promiseRes) => {
         const [[queryResult], [[queryCount]]] = promiseRes;
-        // const queryResult = promiseRes[0][0];
-        // const queryCount = promiseRes[1][0][0].cnt;
-        console.log(queryResult);
-        console.log(queryCount);
         const list = [];
         for (const field of queryResult) {
           list.push({
@@ -215,16 +162,79 @@ const Field = {
       })
       .catch((err) => {
         console.error(err);
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
+        return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
       });
     return ret;
   },
 };
 
+async function checkFieldRepetition(params) {
+  // 先按协议+路径查重
+  const checkSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id AND path=:path`;
+  await DBClient.query(checkSql, { replacements: { proto_id: params.proto_id, path: params.path } })
+    .then(([res]) => {
+      const [queryCount] = res;
+      if (queryCount.cnt > 0) {
+        throw { ret: Ret.CODE_EXISTED, msg: `field path ${params.path} has existed` };
+      }
+    })
+    .catch((err) => {
+      if (err.ret) throw err;
+      console.log(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+}
+
+async function insertField(params) {
+  let id = 0;
+  const querySql = `INSERT INTO ${TableInfo.TABLE_FIELD}(proto_id, field_key, name, \`desc\`, field_type, path, remark, operator)
+        VALUES(:proto_id, :field_key, :name, :desc, :field_type, :path, :remark, :operator)`;
+  await DBClient.query(querySql, {
+    replacements: {
+      proto_id: params.proto_id,
+      field_key: params.field_key,
+      name: params.name,
+      desc: params.desc,
+      field_type: params.field_type,
+      path: params.path,
+      remark: params.remark,
+      // operator: ctx.session.user.loginname,
+      operator: 'joyyieli',
+    } })
+    .then(([res]) => {
+      id = res;
+    }).catch((err) => {
+      console.error(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+  return id;
+}
+
+async function updateField(params) {
+  const querySql = `UPDATE ${TableInfo.TABLE_FIELD}
+      SET proto_id=:proto_id, field_key=:field_key, name=:name, \`desc\`=:desc, field_type=:field_type, path=:path, remark=:remark
+      WHERE id=:id`;
+  await DBClient.query(querySql, {
+    replacements: {
+      proto_id: params.proto_id,
+      field_key: params.field_key,
+      name: params.name,
+      desc: params.desc,
+      field_type: params.field_type,
+      path: params.path,
+      remark: params.remark,
+      id: params.id,
+    },
+  })
+    .catch((err) => {
+      console.log(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+}
+
 function checkCreateParams(params) {
-  if (params.proto_id === undefined || params.name === undefined || params.field_type === undefined
-    || params.path === undefined || params.field_key === undefined) {
+  if (params.proto_id === undefined || params.field_key === undefined || params.name === undefined || params.desc === undefined
+    || params.field_type === undefined || params.path === undefined || params.remark === undefined) {
     return false;
   }
   return true;
@@ -232,14 +242,6 @@ function checkCreateParams(params) {
 
 function checkDeleteParams(params) {
   if (!Array.isArray(params.ids)) {
-    return false;
-  }
-  return true;
-}
-
-function checkEditParams(params) {
-  if (params.id === undefined || params.proto_id === undefined || params.field_key === undefined || params.name === undefined
-    || params.desc === undefined || params.field_type === undefined || params.path === undefined || params.remark === undefined) {
     return false;
   }
   return true;

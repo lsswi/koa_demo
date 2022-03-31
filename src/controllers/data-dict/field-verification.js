@@ -2,61 +2,6 @@ const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 
-async function checkFieldRepetition(params) {
-  // 校验字段是否存在
-  const checkFieldSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE id=:id`;
-  await DBClient.query(checkFieldSql, { replacements: { id: params.field_id } })
-    .then(([res]) => {
-      const [queryCount] = res;
-      if (queryCount.cnt === 0) {
-        throw { ret: Ret.CODE_NOT_EXISTED, msg: `field_id ${params.field_id} not existed` };
-      }
-    });
-
-  // 校验字段规则是否存在
-  const checkRuleSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE field_id=:field_id AND rule_id=:rule_id`;
-  await DBClient.query(checkRuleSql, { replacements: { field_id: params.field_id, rule_id: params.rule_id } })
-    .then(([res]) => {
-      const [queryCount] = res;
-      if (queryCount.cnt > 0) {
-        throw { ret: Ret.CODE_EXISTED, msg: `field_id ${params.field_id} has existed rule_id ${params.rule_id}` };
-      }
-    });
-}
-
-async function insertVerification(params) {
-  let id = 0;
-  const insertSql = `INSERT INTO ${TableInfo.TABLE_FIELD_VERIFICATION}(field_id, rule_id, verification_value, operator)
-    VALUES(:field_id, :rule_id, :verification_value, :operator)`;
-  await DBClient.query(insertSql, {
-    replacements: {
-      field_id: params.field_id,
-      rule_id: params.rule_id,
-      verification_value: params.verification_value,
-      operator: 'joyyieli',
-    },
-  })
-    .then(([res]) => {
-      id = res;
-    });
-  return id;
-}
-
-async function updateVerification(params) {
-  const querySql = `UPDATE ${TableInfo.TABLE_FIELD_VERIFICATION}
-    SET rule_id=:rule_id, field_id=:field_id, verification_value=:verification_value, operator:operator
-    WHERE id=:id`;
-  await DBClient.query(querySql, {
-    replacements: {
-      rule_id: params.rule_id,
-      field_id: params.field_id,
-      verification_value: params.verification_value,
-      id: params.id,
-      // operator: ctx.session.user.loginname
-      operator: 'joyyieli',
-    },
-  });
-}
 
 const FieldVerification = {
   /**
@@ -86,11 +31,9 @@ const FieldVerification = {
         ret.data = { id };
       }
     } catch (err) {
+      if (err.ret) return err;
       console.error(err);
-      if (err.ret) {
-        return err;
-      }
-      return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      return { ret: Ret.CODE_UNKNOWN, msg: Ret.MSG_UNKNOWN };
     }
 
     return ret;
@@ -115,19 +58,86 @@ const FieldVerification = {
     const ids = params.ids.filter(Number.isFinite);
     const querySql = `UDPATE ${TableInfo.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE id IN (:ids)`;
     await DBClient.query(querySql, { replacements: { ids } })
-      .then((res) => {
-        console.log(res);
-        ret.data = { ids };
-      })
+      .then(() => ret.data = { ids })
       .catch((err) => {
         console.error(err);
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
+        return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
       });
     return ret;
   },
-
 };
+
+async function checkFieldRepetition(params) {
+  // 校验字段是否存在
+  const checkFieldSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE id=:id`;
+  await DBClient.query(checkFieldSql, { replacements: { id: params.field_id } })
+    .then(([res]) => {
+      const [queryCount] = res;
+      if (queryCount.cnt === 0) {
+        throw { ret: Ret.CODE_NOT_EXISTED, msg: `field_id ${params.field_id} not existed` };
+      }
+    })
+    .catch((err) => {
+      if (err.ret) throw err;
+      console.log(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+
+  // 校验字段规则是否存在
+  const checkRuleSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE field_id=:field_id AND rule_id=:rule_id`;
+  await DBClient.query(checkRuleSql, { replacements: { field_id: params.field_id, rule_id: params.rule_id } })
+    .then(([res]) => {
+      const [queryCount] = res;
+      if (queryCount.cnt > 0) {
+        throw { ret: Ret.CODE_EXISTED, msg: `field_id ${params.field_id} has existed rule_id ${params.rule_id}` };
+      }
+    })
+    .catch((err) => {
+      if (err.ret) throw err;
+      console.error(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+}
+
+async function insertVerification(params) {
+  let id = 0;
+  const insertSql = `INSERT INTO ${TableInfo.TABLE_FIELD_VERIFICATION}(field_id, rule_id, verification_value, operator)
+    VALUES(:field_id, :rule_id, :verification_value, :operator)`;
+  await DBClient.query(insertSql, {
+    replacements: {
+      field_id: params.field_id,
+      rule_id: params.rule_id,
+      verification_value: params.verification_value,
+      operator: 'joyyieli',
+    },
+  })
+    .then(([res]) => id = res)
+    .catch((err) => {
+      console.log(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+  return id;
+}
+
+async function updateVerification(params) {
+  const querySql = `UPDATE ${TableInfo.TABLE_FIELD_VERIFICATION}
+    SET rule_id=:rule_id, field_id=:field_id, verification_value=:verification_value, operator:operator
+    WHERE id=:id`;
+  await DBClient.query(querySql, {
+    replacements: {
+      rule_id: params.rule_id,
+      field_id: params.field_id,
+      verification_value: params.verification_value,
+      id: params.id,
+      // operator: ctx.session.user.loginname
+      operator: 'joyyieli',
+    },
+  })
+    .catch((err) => {
+      console.error(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+}
 
 function checkCreateParams(params) {
   if (params.field_id === undefined || params.rule_id === undefined || params.verification_value === undefined) {

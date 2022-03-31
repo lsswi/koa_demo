@@ -33,10 +33,8 @@ const Event = {
         }
         await createEvent(params, defJsonFormat);
       }
-    } catch (errObj) {
-      if (errObj.ret) {
-        return errObj;
-      }
+    } catch (err) {
+      if (err.ret) return err;
       return { ret: Ret.CODE_UNKNOWN, msg: Ret.MSG_UNKNOWN };
     }
 
@@ -133,10 +131,9 @@ const Event = {
         list.push(eventObj.get(id));
       }
       ret.data = { list, total };
-    } catch (errObj) {
-      if (errObj.code) {
-        return errObj;
-      }
+    } catch (err) {
+      if (err.ret) return err;
+      console.log(err);
       return { ret: Ret.CODE_UNKNOWN, msg: Ret.MSG_UNKNOWN };
     }
     return ret;
@@ -192,10 +189,8 @@ async function checkEventRepetition(defJsonFormat) {
       }
     })
     .catch((err) => {
-      console.error(err);
-      if (err.ret) {
-        throw err;
-      }
+      if (err.ret) throw err;
+      console.log(err);
       throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
     });
 }
@@ -307,7 +302,6 @@ async function queryEventField(eventInfo, mainSubIDs, allEID) {
       console.error(err);
       throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
     });
-  console.log(eventObj);
   return { eventObj };
 }
 
@@ -346,18 +340,20 @@ async function queryEvents(params) {
   await Promise.all([
     DBClient.query(mainQuerySql, { replacements }),
     DBClient.query(countSql, { replacements }),
-  ]).then((promiseRes) => {
-    const [[mainEvents], [[queryCount]]] = promiseRes;
-    total = queryCount.cnt;
-    for (const mainE of mainEvents) {
-      mainEIDList.push(mainE.id);
-      allEID.push(mainE.id);
-      eventInfo.set(mainE.id, mainE);
-    }
-  }).catch((err) => {
-    console.error(err);
-    throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
-  });
+  ])
+    .then((promiseRes) => {
+      const [[mainEvents], [[queryCount]]] = promiseRes;
+      total = queryCount.cnt;
+      for (const mainE of mainEvents) {
+        mainEIDList.push(mainE.id);
+        allEID.push(mainE.id);
+        eventInfo.set(mainE.id, mainE);
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
 
   /**
    * 查所有主event的所有子event
