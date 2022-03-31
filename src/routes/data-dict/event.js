@@ -9,9 +9,6 @@ async function func(ctx, next) {
     case 'create':
       result = await Event.create(ctx);
       break;
-    case 'edit':
-      result = await Event.edit(ctx);
-      break;
     case 'delete':
       result = await Event.delete(ctx);
       break;

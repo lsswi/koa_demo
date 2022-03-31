@@ -8,7 +8,7 @@ const Ret = {
 
   MSG_OK: 'ok',
   MSG_INTERNAL_DB_ERROR: 'internal db error',
-  MSG_UNKNOWN: 'unkonw '
+  MSG_UNKNOWN: 'unkonw error',
 };
 
 const TableInfo = {
