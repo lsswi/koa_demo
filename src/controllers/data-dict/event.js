@@ -298,7 +298,7 @@ const Event = {
      *    LEFT JOIN field_verification t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
      *    LEFT JOIN field t3 ON t2.field_id=t3.id AND t3.is_deleted=0
      */
-    const fieldQuerySql = `SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t3.name
+    const fieldQuerySql = `SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
       FROM (SELECT * FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE is_deleted=0 AND event_id IN (${allEID})) t1
       LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
       LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0`;
@@ -319,7 +319,12 @@ const Event = {
                 remark: event.remark,
                 operator: event.operator,
                 updated_time: formatTime(event.updated_time),
-                field_list: [{ verification_id: rule.field_verification_id, field_name: rule.name, rule_id: rule.rule_id }],
+                field_list: [{
+                  verification_id: rule.field_verification_id,
+                  field_name: rule.name,
+                  rule_id: rule.rule_id,
+                  value: rule.verification_value,
+                }],
               };
               // 主信息需要所有基础信息，子数据只需要一些跟主数据不同的信息，重复的信息前端复用主信息展示即可
               if (mainSubIDs.get(rule.event_id) !== undefined) {
@@ -330,7 +335,12 @@ const Event = {
               }
               eventObj.set(rule.event_id, tmpObj);
             } else {
-              eventObj.get(rule.event_id).field_list.push({ verification_id: rule.field_verification_id, field_name: rule.name, rule_id: rule.rule_id });
+              eventObj.get(rule.event_id).field_list.push({
+                verification_id: rule.field_verification_id,
+                field_name: rule.name,
+                rule_id: rule.rule_id,
+                value: rule.verification_value,
+              });
             }
           }
         }
