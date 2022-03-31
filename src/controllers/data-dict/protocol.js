@@ -23,7 +23,7 @@ const Protocol = {
     };
 
     if (!checkCreateParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, param name, proto_type can not be null, category must be int array';
       return ret;
     }
@@ -47,7 +47,7 @@ const Protocol = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
 
@@ -65,7 +65,7 @@ const Protocol = {
       msg: Ret.MSG_OK,
     };
     if (!checkDeleteParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, param ids must be an int array';
       return ret;
     }
@@ -78,7 +78,7 @@ const Protocol = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
@@ -95,7 +95,7 @@ const Protocol = {
       msg: Ret.MSG_OK,
     };
     if (!checkEditParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, param id, proto_type, name, desc, category can not be null';
       return ret;
     }
@@ -121,7 +121,7 @@ const Protocol = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
@@ -179,7 +179,7 @@ const Protocol = {
         ret.total = queryCount.cnt;
       })
       .catch((err) => {
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR,
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR,
         ret.mgs = Ret.MSG_INTERNAL_DB_ERROR,
         console.error(err);
       });

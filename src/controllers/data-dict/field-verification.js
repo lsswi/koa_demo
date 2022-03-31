@@ -21,7 +21,7 @@ const FieldVerification = {
       msg: Ret.MSG_OK,
     };
     if (!checkCreateParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, field_id, rule_id can not be null';
       return ret;
     }
@@ -31,16 +31,16 @@ const FieldVerification = {
     await DBClient.query(checkFieldSql, { replacements: { id: params.field_id } })
       .then((res) => {
         if (res[0][0].cnt === 0) {
-          ret.code = Ret.CODE_NOT_EXISTED;
+          ret.ret = Ret.CODE_NOT_EXISTED;
           ret.msg = `field_id ${params.field_id} not existed`;
         }
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
-    if (ret.code !== Ret.CODE_OK) {
+    if (ret.ret !== Ret.CODE_OK) {
       return ret;
     }
 
@@ -49,16 +49,16 @@ const FieldVerification = {
     await DBClient.query(checkRuleSql, { replacements: { field_id: params.field_id, rule_id: params.rule_id } })
       .then((res) => {
         if (res[0][0].cnt > 0) {
-          ret.code = Ret.CODE_EXISTED;
+          ret.ret = Ret.CODE_EXISTED;
           ret.msg = `field_id ${params.field_id} has existed rule_id ${params.rule_id}`;
         }
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
-    if (ret.code !== Ret.CODE_OK) {
+    if (ret.ret !== Ret.CODE_OK) {
       return ret;
     }
 
@@ -78,7 +78,7 @@ const FieldVerification = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
@@ -95,7 +95,7 @@ const FieldVerification = {
       msg: Ret.MSG_OK,
     };
     if (!checkDeleteParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, ids can not be null and should be an int array';
       return ret;
     }
@@ -109,7 +109,7 @@ const FieldVerification = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
@@ -126,7 +126,7 @@ const FieldVerification = {
       msg: Ret.MSG_OK,
     };
     if (!checkEditParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, verification_id, field_id, rule_id, verification_value can not be null';
       return ret;
     }
@@ -148,7 +148,7 @@ const FieldVerification = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;

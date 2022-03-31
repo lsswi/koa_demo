@@ -7,7 +7,6 @@ const Event = {
   /**
    * TODO
    * 1. 合并创建和编辑接口
-   * 2. 删除软删
    */
 
   /**
@@ -17,11 +16,11 @@ const Event = {
   async create(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: Ret.CODE_OK,
+      ret: Ret.CODE_OK,
       msg: Ret.MSG_OK,
     };
     if (!checkCreateParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, proto_id, category_id, name, definition_val can not be null, rule_list should be int array';
       return ret;
     }
@@ -35,16 +34,16 @@ const Event = {
         .then((res) => {
           console.log(res);
           if (res[0][0].cnt > 0) {
-            ret.code = Ret.CODE_EXISTED;
+            ret.ret = Ret.CODE_EXISTED;
             ret.msg = `event definition: ${defJsonFormat} has existed`;
           }
         })
         .catch((err) => {
           console.error(err);
-          ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+          ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
           ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
         });
-      if (ret.code !== Ret.CODE_OK) {
+      if (ret.ret !== Ret.CODE_OK) {
         return ret;
       }
     }
@@ -84,7 +83,7 @@ const Event = {
       });
     } catch (err) {
       console.error(err);
-      ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+      ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
       ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
     }
     return ret;
@@ -105,20 +104,20 @@ const Event = {
       await DBClient.transaction(async (transaction) => {
         const ids = params.ids.filter(Number.isFinite);
         // 删除事件源数据
-        await DBClient.query(`DELETE FROM ${TableInfo.TABLE_EVENT} WHERE id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_EVENT} SET is_deleted=1 WHERE id IN (:ids)`, {
           replacements: { ids },
           transaction,
         });
 
         // 删除事件-规则关联数据
-        await DBClient.query(`DELETE FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE event_id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE event_id IN (:ids)`, {
           replacements: { ids },
           transaction,
         });
       });
     } catch (err) {
       console.log(err);
-      ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+      ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
       ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
     }
     return ret;
@@ -136,7 +135,7 @@ const Event = {
       msg: Ret.MSG_OK,
     };
     if (!checkEditParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params errors, proto_id, category, original_id, name, desc, definition_val, reporting_timing, status, remark, rule_list can not be null';
       return ret;
     }
@@ -184,7 +183,7 @@ const Event = {
       });
     } catch (err) {
       console.error(err);
-      ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+      ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
       ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
     }
 
@@ -202,194 +201,201 @@ const Event = {
       msg: Ret.MSG_OK,
     };
     if (!checkQueryParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, proto_id can not be null';
       return ret;
     }
 
-    // 设置参数默认值
-    const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
+    try {
+      // total：总数
+      // allEID：所有event_id列表，包含main和sub的
+      // mainEIDList：main的event_id列表，用来查询
+      // eventInfo: event_id -> event信息的映射
+      // mainSubIDs: main的event_id对应的subID列表的映射
+      const { total, allEID, mainEIDList, eventInfo, mainSubIDs } = await queryEvents(params);
+      const { eventObj } = await queryEventField(eventInfo, mainSubIDs, allEID);
 
-    // 查询替换参数
-    const replacements = { proto_id: params.proto_id };
-    /**
-     * SELECT * FROM data_dict_event
-     *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
-     */
-    let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
-    /**
-     * SELECT COUNT(*) as cnt FROM data_dict_event
-     *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
-     */
-    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
-    if (params.category !== undefined) {
-      mainQuerySql += ' AND category=:category';
-      countSql += ' AND category=:category';
-      replacements.category = params.category;
-    }
-    if (params.query !== undefined && params.query !== '') {
-      mainQuerySql += ` AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT ${(page - 1) * size}, ${size}`;
-      countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
-      replacements.query = params.query;
-      replacements.fuzzyQuery = `%${params.query}%`;
-    }
-
-    let total = 0;
-    // 所有的event_id，main和sub的event_id集合
-    const allEID = [];
-    // main的event_id列表，用来查询所有sub的event_id
-    const mainEIDList = [];
-    // event_id -> event信息的映射
-    const eventInfo = new Map();
-    await Promise.all([
-      DBClient.query(mainQuerySql, { replacements }),
-      DBClient.query(countSql, { replacements }),
-    ]).then((promiseRes) => {
-      const [[mainEvents], [[queryCount]]] = promiseRes;
-      total = queryCount.cnt;
-      for (const mainE of mainEvents) {
-        mainEIDList.push(mainE.id);
-        allEID.push(mainE.id);
-        eventInfo.set(mainE.id, mainE);
-      }
-    }).catch((err) => {
-      console.error(err);
-      ret.code = Ret.CODE_INTERNAL_DB_ERROR;
-      ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-    });
-
-    if (ret.code !== Ret.CODE_OK) {
-      return ret;
-    }
-
-    /**
-     * 查所有主event的所有子event
-     * SELECT * FORM event WHERE is_deleted=0 AND original_id IN (1, 2, 3);
-     */
-    const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id IN (:ids)`;
-    const mainSubIDs = new Map();
-    await DBClient.query(subQuerySql, { replacements: { ids: mainEIDList } })
-      .then((res) => {
-        const [subEvents] = res;
-        for (const subE of subEvents) {
-          allEID.push(subE.id);
-          eventInfo.set(subE.id, subE);
-          if (mainSubIDs.get(subE.original_id) === undefined) {
-            mainSubIDs.set(subE.original_id, [subE.id]);
-          } else {
-            mainSubIDs.get(subE.original_id).push(subE.id);
-          }
+      // 没有规则的，设置一下基础信息
+      for (const id of allEID) {
+        if (eventObj.get(id) === undefined) {
+          const event = eventInfo.get(id);
+          eventObj.set(id, {
+            id,
+            category: event.category,
+            name: event.name,
+            desc: event.desc,
+            definition_val: event.definition_val,
+            reporting_timing: event.reporting_timing,
+            remark: event.remark,
+            opeartor: event.operator,
+            updated_time: formatTime(event.updated_time),
+          });
         }
-      })
-      .catch((err) => {
-        console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-      });
-    if (ret.code !== Ret.CODE_OK) {
-      return ret;
-    }
+      }
 
-    /**
+      // 构造children结构数据
+      const list = [];
+      for (const id of mainEIDList) {
+        const subIDs = mainSubIDs.get(id);
+        if (subIDs !== undefined) {
+          const arr = [];
+          for (const subID of subIDs) {
+            arr.push(eventObj.get(subID));
+          }
+          eventObj.get(id).children = arr;
+        }
+        list.push(eventObj.get(id));
+      }
+      ret.data = { list, total };
+    } catch (errObj) {
+      if (errObj.code) {
+        return errObj;
+      } else {
+        return {ret: ,msg: 'unkonw error'}
+      }
+    }
+    return ret;
+  },
+};
+
+async function queryEventField(eventInfo, mainSubIDs, allEID) {
+  /**
      * 关联查字段信息
      * SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t3.name
      *    FROM (SELECT * FROM rel_event_field_verification WHERE is_deleted=0 AND event_id IN (1,2,3)) t1
      *    LEFT JOIN field_verification t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
      *    LEFT JOIN field t3 ON t2.field_id=t3.id AND t3.is_deleted=0
      */
-    const fieldQuerySql = `SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
+  const fieldQuerySql = `SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
       FROM (SELECT * FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE is_deleted=0 AND event_id IN (${allEID})) t1
       LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
       LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0`;
 
-    // 构造每个返回的event数据
-    const eventObj = new Map();
-    await DBClient.query(fieldQuerySql)
-      .then(([rules]) => {
-        for (const rule of rules) {
-          // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
-          if (rule.rule_id !== null && rule.name !== null) {
-            // eid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
-            if (eventObj.get(rule.event_id) === undefined) {
-              const event = eventInfo.get(rule.event_id);
-              const tmpObj = {
-                id: rule.event_id,
-                desc: event.desc,
-                remark: event.remark,
-                operator: event.operator,
-                updated_time: formatTime(event.updated_time),
-                field_list: [{
-                  verification_id: rule.field_verification_id,
-                  field_name: rule.name,
-                  rule_id: rule.rule_id,
-                  value: rule.verification_value,
-                }],
-              };
-              // 主信息需要所有基础信息，子数据只需要一些跟主数据不同的信息，重复的信息前端复用主信息展示即可
-              if (mainSubIDs.get(rule.event_id) !== undefined) {
-                tmpObj.category = event.category;
-                tmpObj.name =  event.name;
-                tmpObj.definition_val = JSON.stringify(event.definition_val);
-                tmpObj.reporting_timing = event.reporting_timing;
-              }
-              eventObj.set(rule.event_id, tmpObj);
-            } else {
-              eventObj.get(rule.event_id).field_list.push({
+  // 构造每个返回的event数据
+  const eventObj = new Map();
+  await DBClient.query(fieldQuerySql)
+    .then(([rules]) => {
+      for (const rule of rules) {
+        // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
+        if (rule.rule_id !== null && rule.name !== null) {
+          // eid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
+          if (eventObj.get(rule.event_id) === undefined) {
+            const event = eventInfo.get(rule.event_id);
+            const tmpObj = {
+              id: rule.event_id,
+              desc: event.desc,
+              remark: event.remark,
+              operator: event.operator,
+              status: event.status,
+              updated_time: formatTime(event.updated_time),
+              field_list: [{
                 verification_id: rule.field_verification_id,
                 field_name: rule.name,
                 rule_id: rule.rule_id,
                 value: rule.verification_value,
-              });
+              }],
+            };
+              // 主信息需要所有基础信息，子数据只需要一些跟主数据不同的信息，重复的信息前端复用主信息展示即可
+            if (mainSubIDs.get(rule.event_id) !== undefined) {
+              tmpObj.category = event.category;
+              tmpObj.name =  event.name;
+              tmpObj.definition_val = event.definition_val;
+              tmpObj.reporting_timing = event.reporting_timing;
             }
+            eventObj.set(rule.event_id, tmpObj);
+          } else {
+            eventObj.get(rule.event_id).field_list.push({
+              verification_id: rule.field_verification_id,
+              field_name: rule.name,
+              rule_id: rule.rule_id,
+              value: rule.verification_value,
+            });
           }
         }
-      })
-      .catch((err) => {
-        console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-      });
-    if (ret.code !== Ret.CODE_OK) {
-      return ret;
-    }
-
-    // 没有规则的，设置一下基础信息
-    for (const id of allEID) {
-      if (eventObj.get(id) === undefined) {
-        const event = eventInfo.get(id);
-        eventObj.set(id, {
-          id,
-          category: event.category,
-          name: event.name,
-          desc: event.desc,
-          definition_val: JSON.stringify(event.definition_val),
-          reporting_timing: event.reporting_timing,
-          remark: event.remark,
-          opeartor: event.operator,
-          updated_time: formatTime(event.updated_time),
-        });
       }
-    }
+    })
+    .catch((err) => {
+      console.error(err);
+      throw { code: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+  console.log(eventObj);
+  return { eventObj };
+}
 
-    // 构造children结构数据
-    const list = [];
-    for (const id of mainEIDList) {
-      const subIDs = mainSubIDs.get(id);
-      if (subIDs !== undefined) {
-        const arr = [];
-        for (const subID of subIDs) {
-          arr.push(eventObj.get(subID));
+async function queryEvents(params) {
+  // 设置参数默认值
+  const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+  const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
+
+  // 查询替换参数
+  const replacements = { proto_id: params.proto_id };
+  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
+  /**
+     * SELECT COUNT(*) as cnt FROM data_dict_event
+     *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
+     */
+  let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
+  if (params.category !== undefined) {
+    mainQuerySql += ' AND category=:category';
+    countSql += ' AND category=:category';
+    replacements.category = params.category;
+  }
+  if (params.query !== undefined && params.query !== '') {
+    mainQuerySql += ` AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT ${(page - 1) * size}, ${size}`;
+    countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
+    replacements.query = params.query;
+    replacements.fuzzyQuery = `%${params.query}%`;
+  }
+
+  let total = 0;
+  // 所有的event_id，main和sub的event_id集合
+  const allEID = [];
+  // main的event_id列表，用来查询所有sub的event_id
+  const mainEIDList = [];
+  // event_id -> event信息的映射
+  const eventInfo = new Map();
+  await Promise.all([
+    DBClient.query(mainQuerySql, { replacements }),
+    DBClient.query(countSql, { replacements }),
+  ]).then((promiseRes) => {
+    const [[mainEvents], [[queryCount]]] = promiseRes;
+    total = queryCount.cnt;
+    for (const mainE of mainEvents) {
+      mainEIDList.push(mainE.id);
+      allEID.push(mainE.id);
+      eventInfo.set(mainE.id, mainE);
+    }
+  }).catch((err) => {
+    console.error(err);
+    throw { code: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+  });
+
+  /**
+     * 查所有主event的所有子event
+     * SELECT * FORM event WHERE is_deleted=0 AND original_id IN (1, 2, 3);
+     */
+  const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id IN (:ids)`;
+  const mainSubIDs = new Map();
+  await DBClient.query(subQuerySql, { replacements: { ids: mainEIDList } })
+    .then((res) => {
+      const [subEvents] = res;
+      for (const subE of subEvents) {
+        allEID.push(subE.id);
+        eventInfo.set(subE.id, subE);
+        if (mainSubIDs.get(subE.original_id) === undefined) {
+          mainSubIDs.set(subE.original_id, [subE.id]);
+        } else {
+          mainSubIDs.get(subE.original_id).push(subE.id);
         }
-        eventObj.get(id).children = arr;
       }
-      list.push(eventObj.get(id));
-    }
-    ret.data = { list, total };
+    })
+    .catch((err) => {
+      console.error(err);
+      throw { code: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
 
-    return ret;
-  },
-};
+  return { total, allEID, mainEIDList, eventInfo, mainSubIDs };
+}
 
 function checkCreateParams(params) {
   if (params.proto_id === undefined || params.category === undefined || params.name === undefined || params.definition_val === undefined

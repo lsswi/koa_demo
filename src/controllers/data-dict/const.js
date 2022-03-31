@@ -4,9 +4,11 @@ const Ret = {
   CODE_EXISTED: 40002,
   CODE_NOT_EXISTED: 40003,
   CODE_INTERNAL_DB_ERROR: 50000,
+  CODE_UNKNOWN: 60000,
 
   MSG_OK: 'ok',
   MSG_INTERNAL_DB_ERROR: 'internal db error',
+  MSG_UNKNOWN: 'unkonw '
 };
 
 const TableInfo = {

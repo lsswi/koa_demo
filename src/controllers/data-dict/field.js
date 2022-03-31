@@ -23,7 +23,7 @@ const Field = {
       msg: Ret.MSG_OK,
     };
     if (!checkCreateParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, proto_id, name, field_type, path, field_key can not be null';
       return ret;
     }
@@ -33,17 +33,17 @@ const Field = {
     await DBClient.query(checkSql, { replacements: { proto_id: params.proto_id, path: params.path } })
       .then((res) => {
         if (res[0][0].cnt > 0) {
-          ret.code = Ret.CODE_EXISTED,
+          ret.ret = Ret.CODE_EXISTED,
           ret.msg = `field path ${params.path} has existed`;
         }
       })
       .catch((err) => {
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
         console.error(err);
       });
 
-    if (ret.code !== Ret.CODE_OK) {
+    if (ret.ret !== Ret.CODE_OK) {
       return ret;
     }
 
@@ -67,7 +67,7 @@ const Field = {
         };
       })
       .catch((err) => {
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
         console.error(err);
       });
@@ -86,7 +86,7 @@ const Field = {
       msg: Ret.MSG_OK,
     };
     if (!checkDeleteParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, param ids must be an int array';
       return ret;
     }
@@ -100,7 +100,7 @@ const Field = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
@@ -117,7 +117,7 @@ const Field = {
       msg: Ret.MSG_OK,
     };
     if (!checkEditParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, id, proto_id, field_key, name, desc, field_type, path, remark can not be null';
       return ret;
     }
@@ -144,7 +144,7 @@ const Field = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
@@ -162,7 +162,7 @@ const Field = {
       msg: Ret.MSG_OK,
     };
     if (!checkQueryParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR;
+      ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, proto_id can not be null';
       return ret;
     }
@@ -215,7 +215,7 @@ const Field = {
       })
       .catch((err) => {
         console.error(err);
-        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
         ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
       });
     return ret;
