@@ -204,6 +204,10 @@ const Event = {
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
 
+    await a(ctx);
+
+    return ret;
+
     /**
      * SELECT t2.*, t1.id as sub_id, t1.desc as sub_desc, t1.updated_time as sub_time FROM (
 		 *   SELECT * FROM data_dict_event
@@ -344,12 +348,16 @@ async function a(ctx) {
   const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
   const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
 
+  /**
+   * SELECT * FROM data_dict_event
+	 *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
+   */
   let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
   /**
    * SELECT COUNT(*) as cnt FROM data_dict_event
-   *   WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
+   *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
    */
-  let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
+  let countSql = `SELCT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
 
   let result = [];
   const replacements = {
@@ -383,8 +391,8 @@ async function a(ctx) {
   }
 
   let queryTotal = 0;
-  let mainIDList = [];
-  let eventInfo = new Map();
+  const mainIDList = [];
+  const eventInfo = new Map();
   await result
     .then((promiseRes) => {
       const [[queryResult], [[queryCount]]] = promiseRes;
@@ -394,6 +402,11 @@ async function a(ctx) {
         eventInfo.set(mainE.id, mainE);
       }
     });
+
+  const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id IN (:ids)`;
+  await DBClient.query(subQuerySql, { replacements: { ids: mainIDList } })
+    .then()
+    .catch();
 
   // fatherResult = SELECT * FROM event WHERE xxx limit x,x
   // childrenResult = SELECT * FROM event WHERE original_id IN (:fatherids)
