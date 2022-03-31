@@ -4,6 +4,13 @@ const { Ret, TableInfo } = require('./const');
 
 const FieldVerification = {
   /**
+   * TODO
+   * 1. 合并创建和编辑
+   * 2. 删除字段接口要额外删除rel表里的关系
+   * 3. 删除软删
+   */
+
+  /**
    * 创建规则
    * @url /node-cgi/data-dict/field-verification/create
    */

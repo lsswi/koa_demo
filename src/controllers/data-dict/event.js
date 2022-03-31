@@ -5,6 +5,12 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 
 const Event = {
   /**
+   * TODO
+   * 1. 合并创建和编辑接口
+   * 2. 删除软删
+   */
+
+  /**
    * 创建事件
    * @url /node-cgi/data-dict/event/create
    */
@@ -196,113 +202,180 @@ const Event = {
       msg: Ret.MSG_OK,
     };
     if (!checkQueryParams(params)) {
-      ret.code = Ret.CODE_PARAM_ERROR,
+      ret.code = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, proto_id can not be null';
       return ret;
     }
+
     // 设置参数默认值
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
 
-    await a(ctx);
-
-    return ret;
-
+    // 查询替换参数
+    const replacements = { proto_id: params.proto_id };
     /**
-     * SELECT t2.*, t1.id as sub_id, t1.desc as sub_desc, t1.updated_time as sub_time FROM (
-		 *   SELECT * FROM data_dict_event
-		 *     WHERE proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
-		 *     LIMIT 0, 3
-	   * ) t2
-	   * LEFT JOIN data_dict_event t1 ON t1.original_id=t2.id order by t2.id;
+     * SELECT * FROM data_dict_event
+     *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
      */
-    let querySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
+    let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
     /**
      * SELECT COUNT(*) as cnt FROM data_dict_event
-     *   WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
+     *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
      */
-    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
-
-    let result = [];
-    const replacements = {
-      proto_id: params.proto_id,
-    };
-
+    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
     if (params.category !== undefined) {
-      querySql += ' AND category=:category';
+      mainQuerySql += ' AND category=:category';
       countSql += ' AND category=:category';
       replacements.category = params.category;
     }
-
     if (params.query !== undefined && params.query !== '') {
-      querySql += ` AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT ${(page - 1) * size}, ${size}`;
+      mainQuerySql += ` AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT ${(page - 1) * size}, ${size}`;
       countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
       replacements.query = params.query;
       replacements.fuzzyQuery = `%${params.query}%`;
     }
 
-    const fatherSql = `SELECT t2.*, t1.id as sub_id, t1.desc as sub_desc, t1.updated_time as sub_time, t1.operator as sub_operator
-      FROM(${querySql}) t2
-      LEFT JOIN ${TableInfo.TABLE_EVENT} t1 ON t1.original_id=t2.id ORDER BY t2.id`;
-    result = Promise.all([
-      DBClient.query(fatherSql, { replacements }),
+    let total = 0;
+    // 所有的event_id，main和sub的event_id集合
+    const allEID = [];
+    // main的event_id列表，用来查询所有sub的event_id
+    const mainEIDList = [];
+    // event_id -> event信息的映射
+    const eventInfo = new Map();
+    await Promise.all([
+      DBClient.query(mainQuerySql, { replacements }),
       DBClient.query(countSql, { replacements }),
-    ]);
-
-    await result.then((promiseRes) => {
-      const [[queryResult], [[queryCount]]] = promiseRes;
-      // 构造original_id=0数据+sub数据的数组内容
-      // 因为是left join，所以每个id第一条数据如果是undefined，说明只有本身一条数据；如果第一条不为undefined数据，说明至少有包含自身的2条或以上数据
-      const list = [];
-      const idMap = new Map();
-      for (const event of queryResult) {
-        if (idMap.get(event.id) === undefined) {
-          const tmpObj = {
-            id: event.id,
-            proto_id: event.proto_id,
-            category: event.category,
-            name: event.name,
-            desc: event.desc,
-            definition_val: event.definition_val,
-            reporting_timing: event.reporting_timing,
-            operator: event.operator,
-            updated_time: formatTime(event.updated_time),
-            sub: [],
-          };
-          if (event.sub_id !== null) {
-            tmpObj.sub.push({
-              id: event.sub_id,
-              desc: event.sub_desc,
-              operator: event.sub_operator,
-              updated_time: formatTime(event.sub_time),
-            });
-          }
-          idMap.set(event.id, tmpObj);
-        } else {
-          idMap.get(event.id).sub.push({
-            id: event.sub_id,
-            desc: event.sub_desc,
-            operator: event.sub_operator,
-            updated_time: formatTime(event.sub_time),
-          });
-        }
+    ]).then((promiseRes) => {
+      const [[mainEvents], [[queryCount]]] = promiseRes;
+      total = queryCount.cnt;
+      for (const mainE of mainEvents) {
+        mainEIDList.push(mainE.id);
+        allEID.push(mainE.id);
+        eventInfo.set(mainE.id, mainE);
       }
-
-      // 按查询出来的顺序塞进返回的数组里，去重一下
-      const idSet = new Set();
-      for (const event of queryResult) {
-        if (!idSet.has(event.id)) {
-          list.push(idMap.get(event.id));
-          idSet.add(event.id);
-        }
-      }
-      ret.data = { list, total: queryCount.cnt };
-      console.log(list);
     }).catch((err) => {
       console.error(err);
       ret.code = Ret.CODE_INTERNAL_DB_ERROR;
       ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
     });
+
+    if (ret.code !== Ret.CODE_OK) {
+      return ret;
+    }
+
+    /**
+     * 查所有主event的所有子event
+     * SELECT * FORM event WHERE is_deleted=0 AND original_id IN (1, 2, 3);
+     */
+    const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id IN (:ids)`;
+    const mainSubIDs = new Map();
+    await DBClient.query(subQuerySql, { replacements: { ids: mainEIDList } })
+      .then((res) => {
+        const [subEvents] = res;
+        for (const subE of subEvents) {
+          allEID.push(subE.id);
+          eventInfo.set(subE.id, subE);
+          if (mainSubIDs.get(subE.original_id) === undefined) {
+            mainSubIDs.set(subE.original_id, [subE.id]);
+          } else {
+            mainSubIDs.get(subE.original_id).push(subE.id);
+          }
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
+      });
+    if (ret.code !== Ret.CODE_OK) {
+      return ret;
+    }
+
+    /**
+     * 关联查字段信息
+     * SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t3.name
+     *    FROM (SELECT * FROM rel_event_field_verification WHERE is_deleted=0 AND event_id IN (1,2,3)) t1
+     *    LEFT JOIN field_verification t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
+     *    LEFT JOIN field t3 ON t2.field_id=t3.id AND t3.is_deleted=0
+     */
+    const fieldQuerySql = `SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t3.name
+      FROM (SELECT * FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE is_deleted=0 AND event_id IN (${allEID})) t1
+      LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
+      LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0`;
+
+    // 构造每个返回的event数据
+    const eventObj = new Map();
+    await DBClient.query(fieldQuerySql)
+      .then(([rules]) => {
+        for (const rule of rules) {
+          // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
+          if (rule.rule_id !== null && rule.name !== null) {
+            // eid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
+            if (eventObj.get(rule.event_id) === undefined) {
+              const event = eventInfo.get(rule.event_id);
+              const tmpObj = {
+                id: rule.event_id,
+                desc: event.desc,
+                remark: event.remark,
+                operator: event.operator,
+                updated_time: formatTime(event.updated_time),
+                field_list: [{ verification_id: rule.field_verification_id, field_name: rule.name, rule_id: rule.rule_id }],
+              };
+              // 主信息需要所有基础信息，子数据只需要一些跟主数据不同的信息，重复的信息前端复用主信息展示即可
+              if (mainSubIDs.get(rule.event_id) !== undefined) {
+                tmpObj.category = event.category;
+                tmpObj.name =  event.name;
+                tmpObj.definition_val = JSON.stringify(event.definition_val);
+                tmpObj.reporting_timing = event.reporting_timing;
+              }
+              eventObj.set(rule.event_id, tmpObj);
+            } else {
+              eventObj.get(rule.event_id).field_list.push({ verification_id: rule.field_verification_id, field_name: rule.name, rule_id: rule.rule_id });
+            }
+          }
+        }
+      })
+      .catch((err) => {
+        console.error(err);
+        ret.code = Ret.CODE_INTERNAL_DB_ERROR;
+        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
+      });
+    if (ret.code !== Ret.CODE_OK) {
+      return ret;
+    }
+
+    // 没有规则的，设置一下基础信息
+    for (const id of allEID) {
+      if (eventObj.get(id) === undefined) {
+        const event = eventInfo.get(id);
+        eventObj.set(id, {
+          id,
+          category: event.category,
+          name: event.name,
+          desc: event.desc,
+          definition_val: JSON.stringify(event.definition_val),
+          reporting_timing: event.reporting_timing,
+          remark: event.remark,
+          opeartor: event.operator,
+          updated_time: formatTime(event.updated_time),
+        });
+      }
+    }
+
+    // 构造children结构数据
+    const list = [];
+    for (const id of mainEIDList) {
+      const subIDs = mainSubIDs.get(id);
+      if (subIDs !== undefined) {
+        const arr = [];
+        for (const subID of subIDs) {
+          arr.push(eventObj.get(subID));
+        }
+        eventObj.get(id).children = arr;
+      }
+      list.push(eventObj.get(id));
+    }
+    ret.data = { list, total };
 
     return ret;
   },
@@ -330,158 +403,6 @@ function checkQueryParams(params) {
     return false;
   }
   return true;
-}
-
-async function a(ctx) {
-  const params = ctx.query;
-  const ret = {
-    code: Ret.CODE_OK,
-    msg: Ret.MSG_OK,
-  };
-  if (!checkQueryParams(params)) {
-    ret.code = Ret.CODE_PARAM_ERROR;
-    ret.msg = 'params error, proto_id can not be null';
-    return ret;
-  }
-
-  // 设置参数默认值
-  const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-  const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
-
-  /**
-   * SELECT * FROM data_dict_event
-	 *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
-   */
-  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
-  /**
-   * SELECT COUNT(*) as cnt FROM data_dict_event
-   *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
-   */
-  let countSql = `SELCT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE original_id=0 AND proto_id=:proto_id`;
-
-  let result = [];
-  const replacements = {
-    proto_id: params.proto_id,
-  };
-
-  if (params.category !== undefined) {
-    mainQuerySql += ' AND category=:category';
-    countSql += ' AND category=:category';
-    replacements.category = params.category;
-  }
-
-  if (params.query !== undefined && params.query !== '') {
-    mainQuerySql += ` AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT ${(page - 1) * size}, ${size}`;
-    countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
-    replacements.query = params.query;
-    replacements.fuzzyQuery = `%${params.query}%`;
-  }
-
-  result = Promise.all([
-    DBClient.query(mainQuerySql, { replacements }),
-    DBClient.query(countSql, { replacements }),
-  ]).catch((err) => {
-    console.error(err);
-    ret.code = Ret.CODE_INTERNAL_DB_ERROR;
-    ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-  });
-
-  if (ret.code !== Ret.CODE_OK) {
-    return ret;
-  }
-
-  let queryTotal = 0;
-  const mainIDList = [];
-  const eventInfo = new Map();
-  await result
-    .then((promiseRes) => {
-      const [[queryResult], [[queryCount]]] = promiseRes;
-      queryTotal = queryCount.cnt;
-      for (const mainE of queryResult) {
-        mainIDList.push(mainE.id);
-        eventInfo.set(mainE.id, mainE);
-      }
-    });
-
-  const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id IN (:ids)`;
-  await DBClient.query(subQuerySql, { replacements: { ids: mainIDList } })
-    .then()
-    .catch();
-
-  // fatherResult = SELECT * FROM event WHERE xxx limit x,x
-  // childrenResult = SELECT * FROM event WHERE original_id IN (:fatherids)
-
-  // // allEID -> father,children的id全部都取出来，后面取字段用
-  // // eventInfoMap -> event_id和具体信息的映射，后面构造每个event的结构用
-  // // fatherSubMap -> fatherID都有哪些children_id的映射，后面构造每个event的father+sub结构用
-  // let allEID = [];
-  // for (const res of fatherResult) {
-  //   allEID.push(res.id);
-  //   eventInfoMap[res.id] = res
-  // }
-  // for (const res of childrenResult) {
-  //   allEID.push(res.id);
-  //   eventInfoMap[res.id] = res
-
-  //   // 建立father_id有哪些sub_id的map[father_id][]int
-  //   if (fatherSubMap.get(res.original_id) === undefined) {
-  //     fatherSubMap[res.id].set(res.original_id, int[res.id])
-  //   } else {
-  //     fatherSubMap[res.id].get(res.original_id).push(res.id)
-  //   }
-  // }
-
-  // // mapObj 每个event_id和具体返回结构的映射，包含字段信息，类似下面结构
-  // /**
-  //  * {
-  //  *    "name": "event",
-  //  *    "fields": [
-  //  *      {
-  //  *        "field_verification_id": 1,
-  //  *        "field_name": "操作系统",
-  //  *        "rule_id": 1
-  //  *      },
-  //  *      {
-  //  *        "field_verification_id": 2,
-  //  *        "field_name": "包名",
-  //  *        "rule_id": 3
-  //  *      }
-  //  *    ]
-  //  * }
-  //  */
-  // verificationResult = SELECT * FROM (SELECT * FROM rel_e_f_v WHERE event_id IN allEID) t1 LEFT JOIN field_verification t2 ON t1.field_verification_id = t2.id LEFT JOIN field t3 ON t2.field_id=t3.id;
-  // // 构造每个event的所有字段
-  // for (const rule of verificationResult) {
-  //   if (mapObj.get(rule.event_id) === undefined) {
-  //     if (fatherSubMap.get(rule.event_id)) {
-  //       mapObj.set(rule.event_id, {
-  //         "name": eventInfoMap[rule.event_id];
-  //         ....
-  //         "field_list": [{"field_verification_id": rule.field_id, "rule_id": rule.key, "field_name": rule.field_name}]
-  //       })
-  //     } else {
-  //       // 如果只是子版本，只需要一些desc等不同的信息
-  //       mapObj.set(rule.event_id, {
-  //        "desc": eventInfoMap[rule.event_id];
-  //        "field_list": [{"field_verification_id": rule.field_id, "rule_id": rule.key, "field_name": rule.field_name}]
-  //       })
-  //     }
-  //   } else {
-  //     mapObj.get(rule.event_id).field_list.push({"field_id": rule.field_id, "field_value": rule.key})
-  //   }
-  // }
-
-  // // 构造每个event的father+sub结构
-  // const list = [];
-  // for (const result of father_result) {
-  //   let arr = [];
-  //   // 取出father_id所有的sub_id
-  //   for (const sub_id of mapFatherSubID[result.id]) {
-  //     arr.push(mpObj[sub_id]);
-  //   }
-  //   mapObj[result_id].children = arr;
-  //   list.push(mapObj[result_id]);
-  // }
 }
 
 module.exports = Event;

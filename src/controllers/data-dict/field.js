@@ -5,6 +5,14 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 
 const Field = {
   /**
+   * TODO
+   * 1. 合并创建和编辑
+   * 2. 删除字段接口要额外删除verification表里和rel表里的关系
+   * 3. 删除软删
+   * 4. 查询加上is_deleted=0条件
+   */
+
+  /**
    * 创建字段
    * @url /node-cgi/data-dict/field/create
    */

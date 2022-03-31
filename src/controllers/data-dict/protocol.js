@@ -5,6 +5,13 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 
 const Protocol = {
   /**
+   * TODO
+   * 1. 合并创建和编辑
+   * 2. 查询加上is_deleted=0条件
+   * 3. 删除软删
+   */
+
+  /**
    * 创建协议
    * @url /node-cgi/data-dict/event/create
    */
