@@ -9,9 +9,6 @@ async function func(ctx, next) {
     case 'create':
       result = await FieldVerification.create(ctx);
       break;
-    case 'edit':
-      result = await FieldVerification.edit(ctx);
-      break;
     case 'delete':
       result = await FieldVerification.delete(ctx);
       break;

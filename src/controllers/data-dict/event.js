@@ -70,9 +70,8 @@ const Event = {
         });
       });
     } catch (err) {
-      console.log(err);
-      ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-      ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
+      console.error(err);
+      return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
     }
     return ret;
   },
