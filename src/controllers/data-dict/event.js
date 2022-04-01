@@ -2,6 +2,7 @@ const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
+const common = require('./common');
 
 const Event = {
   /**
@@ -18,18 +19,20 @@ const Event = {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, original_id, category, name, desc, definition_val, reporting_timing, remark, rule_list can not be null' };
     }
 
-    const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
     try {
+      await common.existProto(TableInfo.TABLE_EVENT, params.proto_id);
       // 传了id，update数据
-      await updateEvent(params);
       if (params.id) {
-        console.log(params.id);
+        await common.existData(TableInfo.TABLE_EVENT, params.id);
+        await updateEvent(params);
       } else {
         // original_id=0为创建初始版本，检测一下重复
-        if (!params.original_id) {
-          await checkEventRepetition(defJsonFormat);
+        if (params.original_id === 0) {
+          await checkEventRepetition(params);
+        } else {
+          await common.existOriginal(TableInfo.TABLE_EVENT, params.original_id);
         }
-        await createEvent(params, defJsonFormat);
+        await createEvent(params);
       }
     } catch (err) {
       if (err.ret) return err;
@@ -96,7 +99,7 @@ const Event = {
       // eventInfo: event_id -> event信息的映射
       // mainSubIDs: main的event_id对应的subID列表的映射
       const { total, allEID, mainEIDList, eventInfo, mainSubIDs } = await queryEvents(params);
-      const { eventObj } = await queryEventField(eventInfo, mainSubIDs, allEID);
+      const { eventObj } = await queryEventField(eventInfo, allEID);
 
       // 没有规则的，设置一下基础信息
       for (const id of allEID) {
@@ -139,8 +142,9 @@ const Event = {
   },
 };
 
-async function createEvent(params, defJsonFormat) {
+async function createEvent(params) {
   try {
+    const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
     await DBClient.transaction(async (transaction) => {
       // 创建事件源数据
       const insertEventSql = `INSERT INTO ${TableInfo.TABLE_EVENT}
@@ -178,7 +182,8 @@ async function createEvent(params, defJsonFormat) {
   }
 }
 
-async function checkEventRepetition(defJsonFormat) {
+async function checkEventRepetition(params) {
+  const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
   const checkSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_EVENT} WHERE md_key=MD5(:def_val)`;
   await DBClient.query(checkSql, { replacements: { def_val: defJsonFormat } })
     .then(([res]) => {
@@ -189,7 +194,7 @@ async function checkEventRepetition(defJsonFormat) {
     })
     .catch((err) => {
       if (err.ret) throw err;
-      console.log(err);
+      console.error(err);
       throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
     });
 }
@@ -244,7 +249,7 @@ async function updateEvent(params) {
   }
 }
 
-async function queryEventField(eventInfo, mainSubIDs, allEID) {
+async function queryEventField(eventInfo, allEID) {
   /**
    * 关联查字段信息
    * SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t3.name

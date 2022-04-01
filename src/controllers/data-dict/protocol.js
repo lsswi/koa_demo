@@ -2,6 +2,7 @@ const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
+const common = require('./common');
 
 const Protocol = {
   /**
@@ -20,6 +21,7 @@ const Protocol = {
 
     try {
       if (params.id) {
+        await common.existData(TableInfo.TABLE_PROTOCOL, params.id);
         await updateProto(params);
         ret.data = { id: params.id };
       } else {

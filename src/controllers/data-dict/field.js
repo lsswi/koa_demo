@@ -2,6 +2,7 @@ const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
+const common = require('./common');
 
 const Field = {
   /**
@@ -24,12 +25,14 @@ const Field = {
     }
 
     try {
+      await common.existProto(TableInfo.TABLE_FIELD, params.proto_id);
       if (params.id) {
+        await common.existData(TableInfo.TABLE_FIELD, params.id);
         await updateField(params);
       } else {
         // 先按协议+路径查重
         await checkFieldRepetition(params);
-        const id = await insertField(params);
+        const id = await createField(params);
         ret.data = { id };
       }
     } catch (err) {
@@ -179,7 +182,7 @@ async function checkFieldRepetition(params) {
     });
 }
 
-async function insertField(params) {
+async function createField(params) {
   let id = 0;
   const querySql = `INSERT INTO ${TableInfo.TABLE_FIELD}(proto_id, field_key, name, \`desc\`, field_type, path, remark, operator)
         VALUES(:proto_id, :field_key, :name, :desc, :field_type, :path, :remark, :operator)`;
