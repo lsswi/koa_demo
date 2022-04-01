@@ -11,10 +11,7 @@ const Media = {
    */
   async create(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, original_id, name, desc, version, definition_val, remark can not be null' };
     }
@@ -53,10 +50,7 @@ const Media = {
    */
   async delete(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkDeleteParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, ids can not be null' };
     }
@@ -95,14 +89,11 @@ const Media = {
    */
   async query(ctx) {
     const params = ctx.query;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
-
+    const ret = Ret.OK_RET;
     if (!checkQueryParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
     }
+
     try {
       // total：总数
       // allMID：所有media_id列表，包含main和sub的
@@ -158,10 +149,7 @@ const Media = {
    */
   async createBinding(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!(checkCreateBindingParams(params))) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, media_id, event_ids can not be null' };
     }
@@ -185,10 +173,7 @@ const Media = {
    */
   async deleteBinding(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkDeleteBindingParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, media_id, event_ids can not be null' };
     }
@@ -212,10 +197,7 @@ const Media = {
    */
   async queryBinding(ctx) {
     const params = ctx.query;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkQueryBindingParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, media_id can not be null' };
     }

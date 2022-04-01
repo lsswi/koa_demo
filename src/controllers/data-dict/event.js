@@ -11,10 +11,7 @@ const Event = {
    */
   async create(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      ret: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, original_id, category, name, desc, definition_val, reporting_timing, remark, rule_list can not be null' };
     }
@@ -52,10 +49,7 @@ const Event = {
    */
   async delete(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (params.ids === undefined) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, ids can not be null' };
     }
@@ -94,10 +88,7 @@ const Event = {
    */
   async query(ctx) {
     const params = ctx.query;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkQueryParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
     }

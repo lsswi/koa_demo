@@ -16,10 +16,7 @@ const Field = {
    */
   async create(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, name, field_type, path, field_key can not be null' };
     }
@@ -49,10 +46,7 @@ const Field = {
    */
   async delete(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkDeleteParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param ids must be an int array' };
     }
@@ -108,10 +102,7 @@ const Field = {
   async query(ctx) {
     const params = ctx.query;
     console.log(params.query);
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkQueryParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
     }

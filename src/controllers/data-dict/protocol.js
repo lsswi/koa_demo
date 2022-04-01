@@ -12,10 +12,7 @@ const Protocol = {
    */
   async create(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param name, proto_type can not be null, category must be int array' };
     }
@@ -44,10 +41,7 @@ const Protocol = {
    */
   async delete(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkDeleteParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param ids must be an int array' };
     }
@@ -70,10 +64,7 @@ const Protocol = {
    * @url /node-cgi/data-dict/event/query
    */
   async query(ctx) {
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     const params = ctx.query;
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;

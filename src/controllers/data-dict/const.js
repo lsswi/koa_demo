@@ -1,11 +1,9 @@
 const Ret = {
-  CODE_OK: 0,
   CODE_PARAM_ERROR: 40001,
   CODE_EXISTED: 40002,
   CODE_NOT_EXISTED: 40003,
 
-  MSG_OK: 'ok',
-
+  OK_RET: { ret: 0, msg: 'ok' },
   INTERNAL_DB_ERROR_RET: { ret: 50000, msg: 'internal db error' },
   UNKNOWN_RET: { ret: 60000, msg: 'unkonw error' },
 };

@@ -10,10 +10,7 @@ const FieldVerification = {
    */
   async create(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      ret: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, field_id, rule_id can not be null' };
     }
@@ -45,10 +42,7 @@ const FieldVerification = {
    */
   async delete(ctx) {
     const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
+    const ret = Ret.OK_RET;
     if (!checkDeleteParams(params)) {
       ret.ret = Ret.CODE_PARAM_ERROR;
       ret.msg = 'params error, ids can not be null and should be an int array';
