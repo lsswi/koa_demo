@@ -4,141 +4,6 @@ const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 
-async function queryMedia(params) {
-  // 设置参数默认值
-  const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-  const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
-
-  // 查询替换参数
-  const replacements = { proto_id: params.proto_id };
-  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_MEDIA} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
-  /**
-   * SELECT COUNT(*) as cnt FROM data_dict_media
-   *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6')
-   */
-  let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_MEDIA} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
-  if (params.category !== undefined) {
-    mainQuerySql += ' AND category=:category';
-    countSql += ' AND category=:category';
-    replacements.category = params.category;
-  }
-  if (params.query !== undefined && params.query !== '') {
-    mainQuerySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
-    countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
-    replacements.query = params.query;
-    replacements.fuzzyQuery = `%${params.query}%`;
-  }
-
-  let total = 0;
-  // 所有的media_id，main和sub的media_id集合
-  const allMID = [];
-  // main的media_id列表，用来查询所有sub的media_id
-  const mainMIDList = [];
-  // media_id -> media信息的映射
-  const mediaInfo = new Map();
-  await Promise.all([
-    DBClient.query(mainQuerySql, { replacements }),
-    DBClient.query(countSql, { replacements }),
-  ])
-    .then((promiseRes) => {
-      const [[mainMedia], [[queryCount]]] = promiseRes;
-      total = queryCount.cnt;
-      for (const mainE of mainMedia) {
-        mainMIDList.push(mainE.id);
-        allMID.push(mainE.id);
-        mediaInfo.set(mainE.id, mainE);
-      }
-    })
-    .catch((err) => {
-      console.error(err);
-      throw Ret.INTERNAL_DB_ERROR_RET;
-    });
-
-  /**
-   * 查所有主media的所有子media
-   * SELECT * FORM media WHERE is_deleted=0 AND original_id IN (1, 2, 3);
-   */
-  const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_MEDIA} WHERE original_id IN (:ids)`;
-  const mainSubIDs = new Map();
-  await DBClient.query(subQuerySql, { replacements: { ids: mainMIDList } })
-    .then((res) => {
-      const [subMedia] = res;
-      for (const subM of subMedia) {
-        allMID.push(subM.id);
-        mediaInfo.set(subM.id, subM);
-        if (mainSubIDs.get(subM.original_id) === undefined) {
-          mainSubIDs.set(subM.original_id, [subM.id]);
-        } else {
-          mainSubIDs.get(subM.original_id).push(subM.id);
-        }
-      }
-    })
-    .catch((err) => {
-      console.error(err);
-      throw Ret.INTERNAL_DB_ERROR_RET;
-    });
-
-  return { total, allMID, mainMIDList, mediaInfo, mainSubIDs };
-}
-
-async function queryMediaField(mediaInfo, allMID) {
-/**
-   * 关联查字段信息
-   * SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t3.name
-   *    FROM (SELECT * FROM rel_media_field_verification WHERE is_deleted=0 AND media_id IN (1,2,3)) t1
-   *    LEFT JOIN field_verification t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
-   *    LEFT JOIN field t3 ON t2.field_id=t3.id AND t3.is_deleted=0
-   */
-  const fieldQuerySql = `SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
-    FROM (SELECT * FROM ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} WHERE is_deleted=0 AND media_id IN (${allMID})) t1
-    LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
-    LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0`;
-
-  // 构造每个返回的media数据
-  const mediaObj = new Map();
-  await DBClient.query(fieldQuerySql)
-    .then(([rules]) => {
-      for (const rule of rules) {
-        // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
-        if (rule.rule_id !== null && rule.name !== null) {
-          // mid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
-          if (mediaObj.get(rule.media_id) === undefined) {
-            const media = mediaInfo.get(rule.media_id);
-            const tmpObj = {
-              id: rule.media_id,
-              name: media.name,
-              desc: media.desc,
-              version: media.version,
-              definition_val: media.definition_val,
-              remark: media.remark,
-              operator: media.operator,
-              updated_time: formatTime(media.updated_time),
-              field_list: [{
-                verification_id: rule.field_verification_id,
-                field_name: rule.name,
-                rule_id: rule.rule_id,
-                value: rule.verification_value,
-              }],
-            };
-            mediaObj.set(rule.media_id, tmpObj);
-          } else {
-            mediaObj.get(rule.media_id).field_list.push({
-              verification_id: rule.field_verification_id,
-              field_name: rule.name,
-              rule_id: rule.rule_id,
-              value: rule.verification_value,
-            });
-          }
-        }
-      }
-    })
-    .catch((err) => {
-      console.error(err);
-      throw Ret.INTERNAL_DB_ERROR_RET;
-    });
-  return mediaObj;
-}
-
 const Media = {
   /**
    * 创建/编辑流量
@@ -616,6 +481,141 @@ async function bindMediaEvent(params) {
         throw Ret.INTERNAL_DB_ERROR_RET;
       });
   }
+}
+
+async function queryMedia(params) {
+  // 设置参数默认值
+  const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+  const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
+
+  // 查询替换参数
+  const replacements = { proto_id: params.proto_id };
+  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_MEDIA} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
+  /**
+   * SELECT COUNT(*) as cnt FROM data_dict_media
+   *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6')
+   */
+  let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_MEDIA} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
+  if (params.category !== undefined) {
+    mainQuerySql += ' AND category=:category';
+    countSql += ' AND category=:category';
+    replacements.category = params.category;
+  }
+  if (params.query !== undefined && params.query !== '') {
+    mainQuerySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
+    countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
+    replacements.query = params.query;
+    replacements.fuzzyQuery = `%${params.query}%`;
+  }
+
+  let total = 0;
+  // 所有的media_id，main和sub的media_id集合
+  const allMID = [];
+  // main的media_id列表，用来查询所有sub的media_id
+  const mainMIDList = [];
+  // media_id -> media信息的映射
+  const mediaInfo = new Map();
+  await Promise.all([
+    DBClient.query(mainQuerySql, { replacements }),
+    DBClient.query(countSql, { replacements }),
+  ])
+    .then((promiseRes) => {
+      const [[mainMedia], [[queryCount]]] = promiseRes;
+      total = queryCount.cnt;
+      for (const mainE of mainMedia) {
+        mainMIDList.push(mainE.id);
+        allMID.push(mainE.id);
+        mediaInfo.set(mainE.id, mainE);
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      throw Ret.INTERNAL_DB_ERROR_RET;
+    });
+
+  /**
+   * 查所有主media的所有子media
+   * SELECT * FORM media WHERE is_deleted=0 AND original_id IN (1, 2, 3);
+   */
+  const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_MEDIA} WHERE original_id IN (:ids)`;
+  const mainSubIDs = new Map();
+  await DBClient.query(subQuerySql, { replacements: { ids: mainMIDList } })
+    .then((res) => {
+      const [subMedia] = res;
+      for (const subM of subMedia) {
+        allMID.push(subM.id);
+        mediaInfo.set(subM.id, subM);
+        if (mainSubIDs.get(subM.original_id) === undefined) {
+          mainSubIDs.set(subM.original_id, [subM.id]);
+        } else {
+          mainSubIDs.get(subM.original_id).push(subM.id);
+        }
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      throw Ret.INTERNAL_DB_ERROR_RET;
+    });
+
+  return { total, allMID, mainMIDList, mediaInfo, mainSubIDs };
+}
+
+async function queryMediaField(mediaInfo, allMID) {
+/**
+   * 关联查字段信息
+   * SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t3.name
+   *    FROM (SELECT * FROM rel_media_field_verification WHERE is_deleted=0 AND media_id IN (1,2,3)) t1
+   *    LEFT JOIN field_verification t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
+   *    LEFT JOIN field t3 ON t2.field_id=t3.id AND t3.is_deleted=0
+   */
+  const fieldQuerySql = `SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
+    FROM (SELECT * FROM ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} WHERE is_deleted=0 AND media_id IN (${allMID})) t1
+    LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
+    LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0`;
+
+  // 构造每个返回的media数据
+  const mediaObj = new Map();
+  await DBClient.query(fieldQuerySql)
+    .then(([rules]) => {
+      for (const rule of rules) {
+        // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
+        if (rule.rule_id !== null && rule.name !== null) {
+          // mid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
+          if (mediaObj.get(rule.media_id) === undefined) {
+            const media = mediaInfo.get(rule.media_id);
+            const tmpObj = {
+              id: rule.media_id,
+              name: media.name,
+              desc: media.desc,
+              version: media.version,
+              definition_val: media.definition_val,
+              remark: media.remark,
+              operator: media.operator,
+              updated_time: formatTime(media.updated_time),
+              field_list: [{
+                verification_id: rule.field_verification_id,
+                field_name: rule.name,
+                rule_id: rule.rule_id,
+                value: rule.verification_value,
+              }],
+            };
+            mediaObj.set(rule.media_id, tmpObj);
+          } else {
+            mediaObj.get(rule.media_id).field_list.push({
+              verification_id: rule.field_verification_id,
+              field_name: rule.name,
+              rule_id: rule.rule_id,
+              value: rule.verification_value,
+            });
+          }
+        }
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      throw Ret.INTERNAL_DB_ERROR_RET;
+    });
+  return mediaObj;
 }
 
 module.exports = Media;
