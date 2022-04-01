@@ -15,9 +15,7 @@ const FieldVerification = {
       msg: Ret.MSG_OK,
     };
     if (!checkCreateParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, field_id, rule_id can not be null';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, field_id, rule_id can not be null' };
     }
 
     try {

@@ -20,9 +20,7 @@ const Field = {
       msg: Ret.MSG_OK,
     };
     if (!checkCreateParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, proto_id, name, field_type, path, field_key can not be null';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, name, field_type, path, field_key can not be null' };
     }
 
     try {
@@ -53,9 +51,7 @@ const Field = {
       msg: Ret.MSG_OK,
     };
     if (!checkDeleteParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, param ids must be an int array';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param ids must be an int array' };
     }
 
     try {
@@ -114,9 +110,7 @@ const Field = {
       msg: Ret.MSG_OK,
     };
     if (!checkQueryParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, proto_id can not be null';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
     }
     // 设置参数默认值
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;

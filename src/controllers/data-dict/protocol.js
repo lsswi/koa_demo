@@ -5,13 +5,6 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 
 const Protocol = {
   /**
-   * TODO
-   * 1. 合并创建和编辑
-   * 2. 查询加上is_deleted=0条件
-   * 3. 删除软删
-   */
-
-  /**
    * 创建协议
    * @url /node-cgi/data-dict/event/create
    */
@@ -21,35 +14,23 @@ const Protocol = {
       code: Ret.CODE_OK,
       msg: Ret.MSG_OK,
     };
-
     if (!checkCreateParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, param name, proto_type can not be null, category must be int array';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param name, proto_type can not be null, category must be int array' };
     }
 
-    const querySql = `INSERT INTO ${TableInfo.TABLE_PROTOCOL}(name, proto_type, category, \`desc\`, operator)
-      VALUES(:name, :protoType, :category, :desc, :operator)`;
-    await DBClient.query(querySql, {
-      replacements: {
-        name: params.name,
-        protoType: params.proto_type,
-        category: params.category.join(','),
-        desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
-        // operator: ctx.session.user.loginname,
-        operator: 'joyyieli',
-      },
-    })
-      .then((res) => {
-        ret.data = {
-          id: res[0],
-        };
-      })
-      .catch((err) => {
-        console.error(err);
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-      });
+    try {
+      if (params.id) {
+        await updateProto(params);
+        ret.data = { id: params.id };
+      } else {
+        const id = await createProto(params);
+        ret.data = { id };
+      }
+    } catch (err) {
+      if (err.ret) return err;
+      console.log(err);
+      return { ret: Ret.CODE_UNKNOWN, msg: Ret.MSG_UNKNOWN };
+    }
 
     return ret;
   },
@@ -65,64 +46,18 @@ const Protocol = {
       msg: Ret.MSG_OK,
     };
     if (!checkDeleteParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, param ids must be an int array';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param ids must be an int array' };
     }
 
     const ids = params.ids.filter(Number.isFinite);
-    const querySql = `DELETE FROM ${TableInfo.TABLE_PROTOCOL} WHERE id IN (:ids)`;
+    const querySql = `UPDATE ${TableInfo.TABLE_PROTOCOL} SET is_deleted=0 WHERE id IN (:ids)`;
     await DBClient.query(querySql, { replacements: { ids } })
       .then(() => {
         ret.data = { ids };
       })
       .catch((err) => {
         console.error(err);
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
-      });
-    return ret;
-  },
-
-  /**
-   * 编辑协议
-   * @url /node-cgi/data-dict/event/edit
-   */
-  async edit(ctx) {
-    const params = ctx.request.body;
-    const ret = {
-      code: Ret.CODE_OK,
-      msg: Ret.MSG_OK,
-    };
-    if (!checkEditParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, param id, proto_type, name, desc, category can not be null';
-      return ret;
-    }
-
-    const querySql = `UPDATE ${TableInfo.TABLE_PROTOCOL} SET
-      name=:name,proto_type=:proto_type,category=:category,\`desc\`=:desc,operator=:operator
-      WHERE id=:id`;
-    await DBClient.query(querySql, {
-      replacements: {
-        name: params.name,
-        proto_type: params.proto_type,
-        category: params.category.join(','),
-        desc: params.desc,
-        // operator: ctx.session.user.loginname,
-        operator: 'joyyieli',
-        id: params.id,
-      },
-    })
-      .then(() => {
-        ret.data = {
-          id: params.id,
-        };
-      })
-      .catch((err) => {
-        console.error(err);
-        ret.ret = Ret.CODE_INTERNAL_DB_ERROR;
-        ret.msg = Ret.MSG_INTERNAL_DB_ERROR;
+        return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
       });
     return ret;
   },
@@ -139,24 +74,24 @@ const Protocol = {
     const params = ctx.query;
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
-    const query = Object.prototype.hasOwnProperty.call(params, 'query') ? params.query : '';
 
     let result = [];
-    let querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL} LIMIT :offset,:size`;
+    let querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL}`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL}`;
-    if (query !== '') {
-      querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL} WHERE id=:query OR name LIKE :name OR operator=:query LIMIT :offset,:size`;
-      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL} WHERE id=:query OR name LIKE :name OR operator=:query`;
-      result = Promise.all([
-        DBClient.query(querySql, { replacements: { query, name: `%${params.query}%`, offset: page - 1, size } }),
-        DBClient.query(countSql, { replacements: { query, name: `%${params.query}%` } }),
-      ]);
-    } else {
-      result = Promise.all([
-        DBClient.query(querySql, { replacements: { offset: page - 1, size } }),
-        DBClient.query(countSql),
-      ]);
+
+    const replacements = {};
+    if (params.query !== '' && params.query !== undefined) {
+      querySql += ' WHERE is_deleted=0 AND id=:query OR name LIKE :fuzzyQuery OR operator=:query';
+      countSql += ' WHERE is_deleted=0 AND id=:query OR name LIKE :fuzzyQuery OR operator=:query';
+      replacements.query = params.query,
+      replacements.fuzzyQuery = `%${params.query}%`;
     }
+    querySql += ` LIMIT ${page - 1},${size}`;
+
+    result = Promise.all([
+      DBClient.query(querySql, { replacements }),
+      DBClient.query(countSql, { replacements }),
+    ]);
     await result
       .then((promiseRes) => {
       // promiseALl返回两个查询的结果，sql返回的是两个元素的数组，内容基本一样，直接取第一个即可
@@ -187,8 +122,51 @@ const Protocol = {
   },
 };
 
+async function createProto(params) {
+  let id = 0;
+  const querySql = `INSERT INTO ${TableInfo.TABLE_PROTOCOL}(name, proto_type, category, \`desc\`, operator)
+    VALUES(:name, :protoType, :category, :desc, :operator)`;
+  await DBClient.query(querySql, {
+    replacements: {
+      name: params.name,
+      protoType: params.proto_type,
+      category: params.category.join(','),
+      desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
+      // operator: ctx.session.user.loginname,
+      operator: 'joyyieli',
+    },
+  })
+    .then(([res]) => id = res)
+    .catch((err) => {
+      console.error(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+  return id;
+}
+
+async function updateProto(params) {
+  const querySql = `UPDATE ${TableInfo.TABLE_PROTOCOL} SET
+    name=:name,proto_type=:proto_type,category=:category,\`desc\`=:desc,operator=:operator
+    WHERE id=:id`;
+  await DBClient.query(querySql, {
+    replacements: {
+      name: params.name,
+      proto_type: params.proto_type,
+      category: params.category.join(','),
+      desc: params.desc,
+      // operator: ctx.session.user.loginname,
+      operator: 'joyyieli',
+      id: params.id,
+    },
+  })
+    .catch((err) => {
+      console.error(err);
+      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    });
+}
+
 function checkCreateParams(params) {
-  if (params.name === undefined || params.proto_type === undefined || !Array.isArray(params.category)) {
+  if (params.name === undefined || params.category === undefined || params.proto_type === undefined || params.desc === undefined) {
     return false;
   }
   return true;
@@ -196,14 +174,6 @@ function checkCreateParams(params) {
 
 function checkDeleteParams(params) {
   if (!Array.isArray(params.ids)) {
-    return false;
-  }
-  return true;
-}
-
-function checkEditParams(params) {
-  if (params.id === undefined || params.proto_type === undefined || params.name === undefined
-    || params.desc === undefined || params.category === undefined) {
     return false;
   }
   return true;

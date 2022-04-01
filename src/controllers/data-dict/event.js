@@ -15,9 +15,7 @@ const Event = {
       msg: Ret.MSG_OK,
     };
     if (!checkCreateParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, proto_id, original_id, category, name, desc, definition_val, reporting_timing, remark, rule_list can not be null';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, original_id, category, name, desc, definition_val, reporting_timing, remark, rule_list can not be null' };
     }
 
     const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
@@ -48,9 +46,12 @@ const Event = {
   async delete(ctx) {
     const params = ctx.request.body;
     const ret = {
-      code: 0,
-      msg: 'ok',
+      code: Ret.CODE_OK,
+      msg: Ret.MSG_OK,
     };
+    if (params.ids === undefined) {
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, ids can not be null' };
+    }
 
     try {
       await DBClient.transaction(async (transaction) => {
@@ -85,9 +86,7 @@ const Event = {
       msg: Ret.MSG_OK,
     };
     if (!checkQueryParams(params)) {
-      ret.ret = Ret.CODE_PARAM_ERROR;
-      ret.msg = 'params error, proto_id can not be null';
-      return ret;
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
     }
 
     try {
@@ -324,11 +323,12 @@ async function queryEvents(params) {
     replacements.category = params.category;
   }
   if (params.query !== undefined && params.query !== '') {
-    mainQuerySql += ` AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery) LIMIT ${(page - 1) * size}, ${size}`;
+    mainQuerySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
     countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query OR definition_val LIKE :fuzzyQuery)';
     replacements.query = params.query;
     replacements.fuzzyQuery = `%${params.query}%`;
   }
+  mainQuerySql += ` LIMIT ${(page - 1) * size}, ${size}`;
 
   let total = 0;
   // 所有的event_id，main和sub的event_id集合
