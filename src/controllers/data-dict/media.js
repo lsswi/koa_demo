@@ -24,7 +24,7 @@ async function createMedia(params) {
     .then(([res]) => id = res)
     .catch((err) => {
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
   return id;
 }
@@ -48,7 +48,7 @@ async function updateMedia(params) {
   } })
     .catch((err) => {
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 
@@ -65,32 +65,56 @@ async function checkMediaRepetition(params) {
     .catch((err) => {
       if (err.ret) throw err;
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 
-async function existMedia(mediaID) {
-  const querySql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_MEDIA} WHERE id=:mediaID`;
-  await DBClient.query(querySql, { replacements: { mediaID } })
+async function existEvent(eventIDs) {
+  const existID = new Map();
+  const querySql = `SELECT id FROM ${TableInfo.TABLE_EVENT} WHERE id IN (:eventIDs)`;
+  await DBClient.query(querySql, { replacements: { eventIDs } })
     .then(([res]) => {
-      const [queryCount] = res;
-      if (queryCount === 0) {
-        throw { ret: Ret.CODE_EXISTED, msg: `media_id: ${mediaID} does not exist` };
+      for (const idObj of res) {
+        existID.set(idObj.id, {});
       }
     })
     .catch((err) => {
       if (err.ret) throw err;
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
+  console.log(existID);
+
+  const unexsitedIDs = [];
+  for (const id of eventIDs) {
+    if (existID.get(id) === undefined) {
+      unexsitedIDs.push(id);
+    }
+  }
+
+  if (unexsitedIDs.length > 0) {
+    throw { ret: Ret.CODE_NOT_EXISTED, msg: `event_id: ${unexsitedIDs} not exsited` };
+  }
 }
 
-async function existEvent(eventIDs) {
-
+async function bindMediaEvent(params) {
+  const insertValue = [];
+  console.log(params.event_ids.filter(Number.isFinite));
+  for (const id of params.event_ids.filter(Number.isFinite)) {
+    insertValue.push(`(${params.media_id}, ${id})`);
+  }
+  console.log(insertValue);
+  const querySql = `INSERT IGNORE INTO ${TableInfo.TABLE_REL_MEDIA_EVENT}(media_id, event_id) VALUES${insertValue.join(',')}`;
+  if (insertValue.length > 0) {
+    await DBClient.query(querySql)
+      .catch((err) => {
+        console.error(err);
+        throw Ret.INTERNAL_DB_ERROR_RET;
+      });
+  }
 }
 
 const Media = {
-
   /**
    * 创建/编辑流量
    * @url /node-cgi/data-dict/media/create
@@ -124,7 +148,7 @@ const Media = {
     } catch (err) {
       if (err.ret) return err;
       console.error(err);
-      return { ret: Ret.CODE_UNKNOWN, msg: Ret.MSG_UNKNOWN };
+      return Ret.UNKNOWN_RET;
     }
 
     return ret;
@@ -144,17 +168,31 @@ const Media = {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, ids can not be null' };
     }
 
-    const ids = params.ids.filter(Number.isFinite);
-    const querySql = `UPDATE ${TableInfo.TABLE_MEDIA} SET is_deleted=1 WHERE id IN (:ids)`;
-    await DBClient.query(querySql, { replacements: { ids } })
-      .then(() => {
-        ret.data = { ids };
-      })
-      .catch((err) => {
-        console.error(err);
-        return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
-      });
+    try {
+      await DBClient.transaction(async (transaction) => {
+        // 删除数据源
+        const ids = params.ids.filter(Number.isFinite);
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_MEDIA} SET is_deleted=1 WHERE id IN (:ids)`, {
+          replacements: { ids },
+          transaction,
+        });
 
+        // 删除流量-规则绑定
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE media_id IN (:ids)`, {
+          replacements: { ids },
+          transaction,
+        });
+
+        // 删除流量-事件绑定
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_MEDIA_EVENT} SET is_deleted=1 WHERE media_id IN (:ids)`, {
+          replacements: { ids },
+          transaction,
+        });
+      });
+    } catch (err) {
+      console.error(err);
+      return Ret.INTERNAL_DB_ERROR_RET;
+    }
     return ret;
   },
 
@@ -185,13 +223,16 @@ const Media = {
     }
 
     try {
-      await existMedia(params.media_id);
+      await common.existData(TableInfo.TABLE_MEDIA, params.media_id);
       await existEvent(params.event_ids);
+      await bindMediaEvent(params);
+      ret.data = { ids: params.event_ids };
     } catch (err) {
       if (err.ret) return err;
       console.error(err);
       return Ret.UNKNOWN_RET;
     }
+    return ret;
   },
 
   /**
@@ -204,6 +245,17 @@ const Media = {
       code: Ret.CODE_OK,
       msg: Ret.MSG_OK,
     };
+    if (!checkQueryBindingParams(params)) {
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, media_id, event_ids can not be null' };
+    }
+
+    const querySql = `UPDATE ${TableInfo.TABLE_REL_MEDIA_EVENT} SET is_deleted=1
+      WHERE media_id=${params.media_id} AND event_id IN (${params.eventIDs.filter(Number.isFinite)})`;
+    await DBClient.query(querySql)
+      .catch((err) => {
+        console.error(err);
+        return Ret.INTERNAL_DB_ERROR_RET;
+      });
   },
 
   /**
@@ -218,6 +270,7 @@ const Media = {
     };
   },
 };
+
 
 function checkCreateParams(params) {
   if (params.proto_id === undefined || params.original_id === undefined || params.name === undefined || params.desc === undefined
@@ -235,6 +288,13 @@ function checkDeleteParams(params) {
 }
 
 function checkCreateBindingParams(params) {
+  if (params.media_id === undefined || params.event_ids === undefined) {
+    return false;
+  }
+  return true;
+}
+
+function checkQueryBindingParams(params) {
   if (params.media_id === undefined || params.event_ids === undefined) {
     return false;
   }

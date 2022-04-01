@@ -3,11 +3,13 @@ const Ret = {
   CODE_PARAM_ERROR: 40001,
   CODE_EXISTED: 40002,
   CODE_NOT_EXISTED: 40003,
-  CODE_INTERNAL_DB_ERROR: 50000,
 
   MSG_OK: 'ok',
-  MSG_INTERNAL_DB_ERROR: 'internal db error',
 
+  INTERNAL_DB_ERROR_RET: {
+    ret: 50000,
+    msg: 'internal db error',
+  },
   UNKNOWN_RET: {
     ret: 60000,
     msg: 'unkonw error',

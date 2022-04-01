@@ -36,7 +36,7 @@ const Event = {
       }
     } catch (err) {
       if (err.ret) return err;
-      return { ret: Ret.CODE_UNKNOWN, msg: Ret.MSG_UNKNOWN };
+      return Ret.UNKNOWN_RET;
     }
 
     return ret;
@@ -70,10 +70,16 @@ const Event = {
           replacements: { ids },
           transaction,
         });
+
+        // 删除事件-流量关联数据
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_MEDIA_EVENT} SET is_deleted=1 WHERE event_id IN (:ids)`, {
+          replacements: { ids },
+          transaction,
+        });
       });
     } catch (err) {
       console.error(err);
-      return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      return Ret.INTERNAL_DB_ERROR_RET;
     }
     return ret;
   },
@@ -136,7 +142,7 @@ const Event = {
     } catch (err) {
       if (err.ret) return err;
       console.log(err);
-      return { ret: Ret.CODE_UNKNOWN, msg: Ret.MSG_UNKNOWN };
+      return Ret.UNKNOWN_RET;
     }
     return ret;
   },
@@ -178,7 +184,7 @@ async function createEvent(params) {
     });
   } catch (err) {
     console.error(err);
-    throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    throw Ret.INTERNAL_DB_ERROR_RET;
   }
 }
 
@@ -195,7 +201,7 @@ async function checkEventRepetition(params) {
     .catch((err) => {
       if (err.ret) throw err;
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 
@@ -245,7 +251,7 @@ async function updateEvent(params) {
     });
   } catch (err) {
     console.error(err);
-    throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+    throw Ret.INTERNAL_DB_ERROR_RET;
   }
 }
 
@@ -304,7 +310,7 @@ async function queryEventField(eventInfo, allEID) {
     })
     .catch((err) => {
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
   return { eventObj };
 }
@@ -357,7 +363,7 @@ async function queryEvents(params) {
     })
     .catch((err) => {
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 
   /**
@@ -381,7 +387,7 @@ async function queryEvents(params) {
     })
     .catch((err) => {
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 
   return { total, allEID, mainEIDList, eventInfo, mainSubIDs };

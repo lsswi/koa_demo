@@ -38,7 +38,7 @@ const Field = {
     } catch (err) {
       if (err.ret) return err;
       console.error(err);
-      return { ret: Ret.CODE_UNKNOWN, err: Ret.MSG_UNKNOWN };
+      return Ret.UNKNOWN_RET;
     }
     return ret;
   },
@@ -95,7 +95,7 @@ const Field = {
       });
     } catch (err) {
       console.error(err);
-      return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      return Ret.INTERNAL_DB_ERROR_RET;
     }
 
     return ret;
@@ -159,7 +159,7 @@ const Field = {
       })
       .catch((err) => {
         console.error(err);
-        return { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+        return Ret.INTERNAL_DB_ERROR_RET;
       });
     return ret;
   },
@@ -178,7 +178,7 @@ async function checkFieldRepetition(params) {
     .catch((err) => {
       if (err.ret) throw err;
       console.log(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 
@@ -202,7 +202,7 @@ async function createField(params) {
       id = res;
     }).catch((err) => {
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
   return id;
 }
@@ -225,7 +225,7 @@ async function updateField(params) {
   })
     .catch((err) => {
       console.log(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 

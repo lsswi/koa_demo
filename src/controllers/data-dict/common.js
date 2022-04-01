@@ -14,7 +14,7 @@ async function existProto(table, protoID) {
     .catch((err) => {
       if (err.ret) throw err;
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 
@@ -30,7 +30,7 @@ async function existOriginal(table, originalID) {
     .catch((err) => {
       if (err.ret) throw err;
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 
@@ -46,7 +46,7 @@ async function existData(table, id) {
     .catch((err) => {
       if (err.ret) throw err;
       console.error(err);
-      throw { ret: Ret.CODE_INTERNAL_DB_ERROR, msg: Ret.MSG_INTERNAL_DB_ERROR };
+      throw Ret.INTERNAL_DB_ERROR_RET;
     });
 }
 
