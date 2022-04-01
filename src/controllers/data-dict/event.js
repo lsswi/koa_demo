@@ -20,7 +20,12 @@ const Event = {
     }
 
     try {
-      await common.existProto(TableInfo.TABLE_EVENT, params.proto_id);
+      await common.existProto(TableInfo.TABLE_PROTOCOL, params.proto_id);
+      await common.existVerification(params.rule_list);
+      // original_id !=0 检查一下主数据是否存在
+      if (params.original_id !== 0) {
+        await common.existOriginal(TableInfo.TABLE_MEDIA, params.original_id);
+      }
       // 传了id，update数据
       if (params.id) {
         await common.existData(TableInfo.TABLE_EVENT, params.id);
@@ -29,10 +34,9 @@ const Event = {
         // original_id=0为创建初始版本，检测一下重复
         if (params.original_id === 0) {
           await checkEventRepetition(params);
-        } else {
-          await common.existOriginal(TableInfo.TABLE_EVENT, params.original_id);
         }
-        await createEvent(params);
+        const id = await createEvent(params);
+        ret.data = { id };
       }
     } catch (err) {
       if (err.ret) return err;
@@ -105,7 +109,7 @@ const Event = {
       // eventInfo: event_id -> event信息的映射
       // mainSubIDs: main的event_id对应的subID列表的映射
       const { total, allEID, mainEIDList, eventInfo, mainSubIDs } = await queryEvents(params);
-      const { eventObj } = await queryEventField(eventInfo, allEID);
+      const eventObj = await queryEventField(eventInfo, allEID);
 
       // 没有规则的，设置一下基础信息
       for (const id of allEID) {
@@ -149,8 +153,8 @@ const Event = {
 };
 
 async function createEvent(params) {
+  let id = 0;
   try {
-    const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
     await DBClient.transaction(async (transaction) => {
       // 创建事件源数据
       const insertEventSql = `INSERT INTO ${TableInfo.TABLE_EVENT}
@@ -162,15 +166,16 @@ async function createEvent(params) {
           category: params.category,
           original_id: params.original_id,
           name: params.name,
-          desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
-          definition_val: defJsonFormat,
-          reporting_timing: Object.prototype.hasOwnProperty.call(params, 'reporting_timing') ? params.reporting_timing : '',
-          status: Object.prototype.hasOwnProperty.call(params, 'status') ? params.status : 1,
-          remark: Object.prototype.hasOwnProperty.call(params, 'remark') ? params.remark : '',
+          desc: params.desc,
+          definition_val: JSON.stringify(JSON.parse(params.definition_val)),
+          reporting_timing: params.reporting_timing,
+          status: params.status,
+          remark: params.remark,
           operator: 'joyyieli',
         },
         transaction,
       });
+      id = eventID;
 
       // 创建事件和字段规则的关联
       const insertValue = [];
@@ -186,6 +191,7 @@ async function createEvent(params) {
     console.error(err);
     throw Ret.INTERNAL_DB_ERROR_RET;
   }
+  return id;
 }
 
 async function checkEventRepetition(params) {
@@ -312,7 +318,7 @@ async function queryEventField(eventInfo, allEID) {
       console.error(err);
       throw Ret.INTERNAL_DB_ERROR_RET;
     });
-  return { eventObj };
+  return eventObj;
 }
 
 async function queryEvents(params) {

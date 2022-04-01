@@ -1,9 +1,9 @@
 const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
-const { Ret } = require('./const');
+const { Ret, TableInfo } = require('./const');
 
 async function existProto(table, protoID) {
-  const querySql = `SELECT COUNT(*) as cnt FROM ${table} WHERE proto_id=:protoID`;
+  const querySql = `SELECT COUNT(*) as cnt FROM ${table} WHERE id=:protoID`;
   await DBClient.query(querySql, { replacements: { table, protoID } })
     .then(([res]) => {
       const [queryCount] = res;
@@ -19,7 +19,7 @@ async function existProto(table, protoID) {
 }
 
 async function existOriginal(table, originalID) {
-  const querySql = `SELECT COUNT(*) as cnt FROM ${table} WHERE original_id=:originalID`;
+  const querySql = `SELECT COUNT(*) as cnt FROM ${table} WHERE id=:originalID`;
   await DBClient.query(querySql, { replacements: { table, originalID } })
     .then(([res]) => {
       const [queryCount] = res;
@@ -50,8 +50,37 @@ async function existData(table, id) {
     });
 }
 
+async function existVerification(verificationIDs) {
+  const existID = new Map();
+  const querySql = `SELECT id FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE id IN (:verificationIDs)`;
+  await DBClient.query(querySql, { replacements: { verificationIDs } })
+    .then(([res]) => {
+      for (const idObj of res) {
+        existID.set(idObj.id, {});
+      }
+    })
+    .catch((err) => {
+      if (err.ret) throw err;
+      console.error(err);
+      throw Ret.INTERNAL_DB_ERROR_RET;
+    });
+  console.log(existID);
+
+  const unexsitedIDs = [];
+  for (const id of verificationIDs) {
+    if (existID.get(id) === undefined) {
+      unexsitedIDs.push(id);
+    }
+  }
+
+  if (unexsitedIDs.length > 0) {
+    throw { ret: Ret.CODE_NOT_EXISTED, msg: `verification_id: ${unexsitedIDs} not exsited` };
+  }
+}
+
 module.exports = {
   existProto,
   existOriginal,
   existData,
+  existVerification,
 };

@@ -25,7 +25,7 @@ const Field = {
     }
 
     try {
-      await common.existProto(TableInfo.TABLE_FIELD, params.proto_id);
+      await common.existProto(TableInfo.TABLE_PROTOCOL, params.proto_id);
       if (params.id) {
         await common.existData(TableInfo.TABLE_FIELD, params.id);
         await updateField(params);
@@ -123,7 +123,8 @@ const Field = {
     let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id`;
     if (params.query !== '' && params.query !== undefined) {
-      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT ${(page - 1) * size}, ${size}`;
+      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD}
+        WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT ${(page - 1) * size}, ${size}`;
       countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
       result = Promise.all([
         DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
