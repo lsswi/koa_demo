@@ -9,9 +9,6 @@ async function func(ctx, next) {
     case 'create':
       result = await Protocol.create(ctx);
       break;
-    case 'edit':
-      result = await Protocol.edit(ctx);
-      break;
     case 'delete':
       result = await Protocol.delete(ctx);
       break;
