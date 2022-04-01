@@ -4,6 +4,7 @@ const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 
+// TODO 这里能删协议吗，删了其他的全部都删除？
 const Protocol = {
   /**
    * 创建协议

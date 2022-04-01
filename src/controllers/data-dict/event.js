@@ -322,7 +322,7 @@ async function queryEvents(params) {
 
   // 查询替换参数
   const replacements = { proto_id: params.proto_id };
-  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
+  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
   /**
    * SELECT COUNT(*) as cnt FROM data_dict_event
    *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
@@ -339,7 +339,6 @@ async function queryEvents(params) {
     replacements.query = params.query;
     replacements.fuzzyQuery = `%${params.query}%`;
   }
-  mainQuerySql += ` LIMIT ${(page - 1) * size}, ${size}`;
 
   let total = 0;
   // 所有的event_id，main和sub的event_id集合

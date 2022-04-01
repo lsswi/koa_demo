@@ -245,7 +245,7 @@ const Media = {
       code: Ret.CODE_OK,
       msg: Ret.MSG_OK,
     };
-    if (!checkQueryBindingParams(params)) {
+    if (!checkDeleteBindingParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, media_id, event_ids can not be null' };
     }
 
@@ -267,14 +267,64 @@ const Media = {
    * @url /node-cgi/data-dict/media/query-binding
    */
   async queryBinding(ctx) {
-    const params = ctx.request.body;
+    const params = ctx.query;
     const ret = {
       code: Ret.CODE_OK,
       msg: Ret.MSG_OK,
     };
+    if (!checkQueryBindingParams(params)) {
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, media_id can not be null' };
+    }
+    const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
+
+    const replacements = { media_id: params.media_id };
+    const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_REL_MEDIA_EVENT} WHERE is_deleted=0 AND media_id=:media_id`;
+
+    let countSql = `SELECT COUNT(*) as cnt FROM (${subQuerySql}) t1 LEFT JOIN ${TableInfo.TABLE_EVENT} t2 ON t1.event_id=t2.id WHERE t2.is_deleted=0`;
+    let querySql = `SELECT t2.id, t2.name, t2.category, t2.definition_val, t2.operator, t2.updated_time FROM (${subQuerySql}) t1
+      LEFT JOIN ${TableInfo.TABLE_EVENT} t2 ON t1.event_id=t2.id WHERE t2.is_deleted=0`;
+
+    if (params.category !== undefined) {
+      querySql += ' AND category=:category';
+      countSql += ' AND category=:category';
+      replacements.category = params.category;
+    }
+
+    if (params.query !== undefined && params.query !== '') {
+      querySql += ' AND (t2.name LIKE :fuzzyQuery OR t2.id=:query OR t2.definition_val LIKE :fuzzyQuery)';
+      countSql += ' AND (t2.name LIKE :fuzzyQuery OR t2.id=:query OR t2.definition_val LIKE :fuzzyQuery)';
+      replacements.query = params.query;
+      replacements.fuzzyQuery = `%${params.query}%`;
+    }
+    querySql += ` LIMIT ${(page - 1) * size}, ${size}`;
+
+    await Promise.all([
+      await DBClient.query(querySql, { replacements }),
+      await DBClient.query(countSql, { replacements }),
+    ])
+      .then((promiseRes) => {
+        const [[events], [[queryCount]]] = promiseRes;
+        const list = [];
+        for (const e of events) {
+          list.push({
+            id: e.id,
+            name: e.name,
+            category: e.category,
+            definition_val: e.definition_val,
+            operator: e.operator,
+            updated_time: formatTime(e.updated_time),
+          });
+        }
+        ret.data = { list, total: queryCount.cnt };
+      })
+      .catch((err) => {
+        console.error(err);
+        throw Ret.INTERNAL_DB_ERROR_RET;
+      });
+    return ret;
   },
 };
-
 
 function checkCreateParams(params) {
   if (params.proto_id === undefined || params.original_id === undefined || params.name === undefined || params.desc === undefined
@@ -298,8 +348,15 @@ function checkCreateBindingParams(params) {
   return true;
 }
 
-function checkQueryBindingParams(params) {
+function checkDeleteBindingParams(params) {
   if (params.media_id === undefined || params.event_ids === undefined) {
+    return false;
+  }
+  return true;
+}
+
+function checkQueryBindingParams(params) {
+  if (params.media_id === undefined) {
     return false;
   }
   return true;

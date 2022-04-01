@@ -120,10 +120,10 @@ const Field = {
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
 
     let result = [];
-    let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id LIMIT :offset,:size`;
+    let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
     let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id`;
     if (params.query !== '' && params.query !== undefined) {
-      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT :offset,:size`;
+      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT ${(page - 1) * size}, ${size}`;
       countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
       result = Promise.all([
         DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
