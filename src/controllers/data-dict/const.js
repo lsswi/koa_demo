@@ -6,14 +6,8 @@ const Ret = {
 
   MSG_OK: 'ok',
 
-  INTERNAL_DB_ERROR_RET: {
-    ret: 50000,
-    msg: 'internal db error',
-  },
-  UNKNOWN_RET: {
-    ret: 60000,
-    msg: 'unkonw error',
-  },
+  INTERNAL_DB_ERROR_RET: { ret: 50000, msg: 'internal db error' },
+  UNKNOWN_RET: { ret: 60000, msg: 'unkonw error' },
 };
 
 const TableInfo = {
