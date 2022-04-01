@@ -55,14 +55,28 @@ const FieldVerification = {
       return ret;
     }
 
-    const ids = params.ids.filter(Number.isFinite);
-    const querySql = `UDPATE ${TableInfo.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE id IN (:ids)`;
-    await DBClient.query(querySql, { replacements: { ids } })
-      .then(() => ret.data = { ids })
-      .catch((err) => {
-        console.error(err);
-        return Ret.INTERNAL_DB_ERROR_RET;
+    try {
+      await DBClient.transaction(async (transaction) => {
+        const ids = params.ids.filter(Number.isFinite);
+        // 删除规则源数据
+        await DBClient.query(`UDPATE ${TableInfo.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE id IN (:ids)`, {
+          replacements: { ids },
+          transaction });
+
+        // 删除规则流量关联
+        await DBClient.query(`UDPATE ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+          replacements: { ids },
+          transaction });
+
+        // 删除规则事件关联
+        await DBClient.query(`UDPATE ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+          replacements: { ids },
+          transaction });
       });
+    } catch (err) {
+      console.error(err);
+      return Ret.INTERNAL_DB_ERROR_RET;
+    }
     return ret;
   },
 };

@@ -252,10 +252,14 @@ const Media = {
     const querySql = `UPDATE ${TableInfo.TABLE_REL_MEDIA_EVENT} SET is_deleted=1
       WHERE media_id=${params.media_id} AND event_id IN (${params.eventIDs.filter(Number.isFinite)})`;
     await DBClient.query(querySql)
+      .then(() => {
+        ret.data = { ids: params.ids };
+      })
       .catch((err) => {
         console.error(err);
         return Ret.INTERNAL_DB_ERROR_RET;
       });
+    return ret;
   },
 
   /**
