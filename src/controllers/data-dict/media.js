@@ -102,6 +102,8 @@ const Media = {
       // mainSubIDs: main的media_id对应的subID列表的映射
       const { total, allMID, mainMIDList, mediaInfo, mainSubIDs } = await queryMedia(params);
       const mediaObj = await queryMediaField(mediaInfo, allMID);
+
+      // 没有规则的，设置一下基础信息
       for (const id of allMID) {
         if (mediaObj.get(id) === undefined) {
           const event = mediaInfo.get(id);
@@ -138,8 +140,6 @@ const Media = {
       console.error(err);
       return Ret.UNKNOWN_RET;
     }
-
-
     return ret;
   },
 
