@@ -105,7 +105,7 @@ const Media = {
 
       // 没有规则的，设置一下基础信息
       for (const id of allMID) {
-        if (mediaObj.get(id) === undefined) {
+        if (!mediaObj.has(id)) {
           const event = mediaInfo.get(id);
           mediaObj.set(id, {
             id,
@@ -124,10 +124,9 @@ const Media = {
       // 构造children结构数据
       const list = [];
       for (const id of mainMIDList) {
-        const subIDs = mainSubIDs.get(id);
-        if (subIDs !== undefined) {
+        if (mainSubIDs.has(id)) {
           const arr = [];
-          for (const subID of subIDs) {
+          for (const subID of mainSubIDs.get(id)) {
             arr.push(mediaObj.get(subID));
           }
           mediaObj.get(id).children = arr;
@@ -438,7 +437,7 @@ async function existEvent(eventIDs) {
 
   const unexsitedIDs = [];
   for (const id of eventIDs) {
-    if (existID.get(id) === undefined) {
+    if (!existID.has(id)) {
       unexsitedIDs.push(id);
     }
   }
@@ -527,7 +526,7 @@ async function queryMedia(params) {
       for (const subM of subMedia) {
         allMID.push(subM.id);
         mediaInfo.set(subM.id, subM);
-        if (mainSubIDs.get(subM.original_id) === undefined) {
+        if (mainSubIDs.has(subM.original_id)) {
           mainSubIDs.set(subM.original_id, [subM.id]);
         } else {
           mainSubIDs.get(subM.original_id).push(subM.id);
@@ -553,7 +552,7 @@ async function queryMediaField(mediaInfo, allMID) {
   const fieldQuerySql = `SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
     FROM (SELECT * FROM ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} WHERE is_deleted=0 AND media_id IN (${allMID})) t1
     LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
-    LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0`;
+    LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0 ORDER BY t1.media_id`;
 
   // 构造每个返回的media数据
   const mediaObj = new Map();
@@ -562,8 +561,8 @@ async function queryMediaField(mediaInfo, allMID) {
       for (const rule of rules) {
         // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
         if (rule.rule_id !== null && rule.name !== null) {
-          // mid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
-          if (mediaObj.get(rule.media_id) === undefined) {
+        // mid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
+          if (!mediaObj.has(rule.media_id)) {
             const media = mediaInfo.get(rule.media_id);
             const tmpObj = {
               id: rule.media_id,

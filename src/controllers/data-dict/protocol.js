@@ -67,7 +67,7 @@ const Protocol = {
     const ret = Ret.OK_RET;
     const params = ctx.query;
     const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
+    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
 
     let result = [];
     let querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL}`;

@@ -100,11 +100,11 @@ const Event = {
       // eventInfo: event_id -> event信息的映射
       // mainSubIDs: main的event_id对应的subID列表的映射
       const { total, allEID, mainEIDList, eventInfo, mainSubIDs } = await queryEvents(params);
-      const eventObj = await queryEventField(eventInfo, allEID);
+      const eventObj = await queryEventField(eventInfo, allEID, params.proto_id);
 
       // 没有规则的，设置一下基础信息
       for (const id of allEID) {
-        if (eventObj.get(id) === undefined) {
+        if (!eventObj.has(id)) {
           const event = eventInfo.get(id);
           eventObj.set(id, {
             id,
@@ -258,12 +258,12 @@ async function queryEventField(eventInfo, allEID) {
    * SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t3.name
    *    FROM (SELECT * FROM rel_event_field_verification WHERE is_deleted=0 AND event_id IN (1,2,3)) t1
    *    LEFT JOIN field_verification t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
-   *    LEFT JOIN field t3 ON t2.field_id=t3.id AND t3.is_deleted=0
+   *    LEFT JOIN field t3 ON t2.field_id=t3.id WHERE t3.is_deleted=0 AND t3.is_deleted=0
    */
   const fieldQuerySql = `SELECT t1.event_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
       FROM (SELECT * FROM ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE is_deleted=0 AND event_id IN (${allEID})) t1
       LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
-      LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0`;
+      LEFT JOIN ${TableInfo.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0 ORDER BY t1.event_id`;
 
   // 构造每个返回的event数据
   const eventObj = new Map();
@@ -273,7 +273,7 @@ async function queryEventField(eventInfo, allEID) {
         // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
         if (rule.rule_id !== null && rule.name !== null) {
           // eid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
-          if (eventObj.get(rule.event_id) === undefined) {
+          if (!eventObj.has(rule.event_id)) {
             const event = eventInfo.get(rule.event_id);
             const tmpObj = {
               id: rule.event_id,
@@ -319,7 +319,7 @@ async function queryEvents(params) {
 
   // 查询替换参数
   const replacements = { proto_id: params.proto_id };
-  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
+  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=${params.proto_id} LIMIT ${(page - 1) * size}, ${size}`;
   /**
    * SELECT COUNT(*) as cnt FROM data_dict_event
    *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
@@ -374,7 +374,7 @@ async function queryEvents(params) {
       for (const subE of subEvents) {
         allEID.push(subE.id);
         eventInfo.set(subE.id, subE);
-        if (mainSubIDs.get(subE.original_id) === undefined) {
+        if (!mainSubIDs.has(subE.original_id)) {
           mainSubIDs.set(subE.original_id, [subE.id]);
         } else {
           mainSubIDs.get(subE.original_id).push(subE.id);

@@ -68,7 +68,7 @@ async function existVerification(verificationIDs) {
 
   const unexsitedIDs = [];
   for (const id of verificationIDs) {
-    if (existID.get(id) === undefined) {
+    if (!existID.has(id)) {
       unexsitedIDs.push(id);
     }
   }

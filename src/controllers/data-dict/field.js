@@ -106,56 +106,161 @@ const Field = {
     if (!checkQueryParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
     }
-    // 设置参数默认值
-    const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
 
-    let result = [];
-    let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
-    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE proto_id=:proto_id`;
-    if (params.query !== '' && params.query !== undefined) {
-      querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD}
-        WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT ${(page - 1) * size}, ${size}`;
-      countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
-      result = Promise.all([
-        DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
-        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%` } }),
-      ]);
-    } else {
-      result = Promise.all([
-        DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
-        DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query } }),
-      ]);
+    const { total, verificationList } = await queryFields(params);
+    const verificationObj = formVerificationObj(verificationList);
+    console.log(verificationObj);
+    const list = [];
+    const isPush = new Map();
+    for (const v of verificationList) {
+      if (!isPush.has(v.field_id)) {
+        list.push(verificationObj.get(v.field_id));
+        isPush.set(v.field_id, true);
+      }
     }
-    await result
-      .then((promiseRes) => {
-        const [[queryResult], [[queryCount]]] = promiseRes;
-        const list = [];
-        for (const field of queryResult) {
-          list.push({
-            id: field.id,
-            proto_id: field.proto_id,
-            field_key: field.field_key,
-            name: field.name,
-            desc: field.desc,
-            field_type: field.field_type,
-            path: field.path,
-            remark: field.remark,
-            operator: field.operator,
-            created_time: formatTime(field.created_time),
-            updated_time: formatTime(field.updated_time),
-          });
-        }
-        ret.data = { list };
-        ret.total = queryCount.cnt;
-      })
-      .catch((err) => {
-        console.error(err);
-        return Ret.INTERNAL_DB_ERROR_RET;
-      });
+    ret.data = { list, total };
+
     return ret;
+    // // 设置参数默认值
+    // const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+    // const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
+
+    // let result = [];
+    // let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
+    // let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
+    // if (params.query !== '' && params.query !== undefined) {
+    //   querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD}
+    //     WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT ${(page - 1) * size}, ${size}`;
+    //   countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
+    //   result = Promise.all([
+    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
+    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%` } }),
+    //   ]);
+    // } else {
+    //   result = Promise.all([
+    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
+    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query } }),
+    //   ]);
+    // }
+    // await result
+    //   .then((promiseRes) => {
+    //     const [[queryResult], [[queryCount]]] = promiseRes;
+    //     const list = [];
+    //     for (const field of queryResult) {
+    //       list.push({
+    //         id: field.id,
+    //         proto_id: field.proto_id,
+    //         field_key: field.field_key,
+    //         name: field.name,
+    //         desc: field.desc,
+    //         field_type: field.field_type,
+    //         path: field.path,
+    //         remark: field.remark,
+    //         operator: field.operator,
+    //         created_time: formatTime(field.created_time),
+    //         updated_time: formatTime(field.updated_time),
+    //       });
+    //     }
+    //     ret.data = { list };
+    //     ret.total = queryCount.cnt;
+    //   })
+    //   .catch((err) => {
+    //     console.error(err);
+    //     return Ret.INTERNAL_DB_ERROR_RET;
+    //   });
+    // return ret;
   },
 };
+
+function formVerificationObj(verificationList) {
+  const verificationObj = new Map();
+  for (const v of verificationList) {
+    if (!verificationObj.has(v.field_id)) {
+      const tmpObj = {
+        id: v.field_id,
+        field_key: v.field_key,
+        name: v.name,
+        desc: v.desc,
+        field_type: v.field_type,
+        path: v.path,
+        remark: v.remark,
+        operator: v.field_operator,
+        updated_time: formatTime(v.field_time),
+      };
+      if (v.verification_id !== null) {
+        tmpObj.verification_list = [{
+          id: v.verification_id,
+          rule_id: v.rule_id,
+          value: v.verification_value,
+          operator: v.verification_operator,
+          updated_time: v.verification_time,
+        }];
+      }
+      verificationObj.set(v.field_id, tmpObj);
+    } else {
+      verificationObj.get(v.field_id).verification_list.push({
+        id: v.verification_id,
+        rule_id: v.rule_id,
+        value: v.verification_value,
+        operator: v.verification_operator,
+        updated_time: formatTime(v.verification_time),
+      });
+    }
+  }
+  return verificationObj;
+}
+
+async function queryFields(params) {
+  // 设置参数默认值
+  const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
+  const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
+
+  const replacements = { proto_id: params.proto_id };
+  /**
+   * SELECT t1.id, t1.field_key, t1.name, t1.desc, t1.field_type, t1.path, t1.remark, t1.operator, t1.updated_time as field_time, t2.rule_id,
+   *  t2.operator as verification_operator, t2.updated_time as verification_time
+   * FROM (SELECT * FROM data_dict_field WHERE is_deleted=0 AND proto_id=1 AND (id='joyyieli' OR name LIKE '%joyyieli%' OR operator='joyyieli') LIMIT 0, 10) t1
+	 * LEFT JOIN data_dict_field_verification t2 ON t1.id=t2.field_id AND t2.is_deleted=0 ORDER BY t1.id;
+   */
+  let subQuerySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
+  let countSql = `SELECT COUNT(*) FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
+  if (params.query !== undefined && params.query !== '') {
+    subQuerySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
+    countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
+    replacements.query = params.query;
+    replacements.fuzzyQuery = `%${params.query}%`;
+  }
+  subQuerySql += ` LIMIT ${(page - 1) * size}, ${size}`;
+
+  const querySql = `SELECT t1.id as field_id, t1.field_key, t1.name, t1.desc, t1.field_type, t1.path, t1.remark, t1.operator as field_operator, t1.updated_time as field_time,
+      t2.id as verification_id, t2.verification_value, t2.rule_id, t2.operator as verification_operator, t2.updated_time as verification_time
+    FROM (${subQuerySql}) t1
+    LEFT JOIN ${TableInfo.TABLE_FIELD_VERIFICATION} t2 ON t1.id=t2.field_id AND t2.is_deleted=0
+    ORDER BY t1.id`;
+
+  let total = 0;
+  let verificationList = [];
+  await Promise.all([
+    DBClient.query(querySql, { replacements }),
+    DBClient.query(countSql, { replacements }),
+  ])
+    .then((promiseRes) => {
+      const [[verifications], [[queryCount]]] = promiseRes;
+      total = queryCount.cnt;
+      verificationList = verifications;
+      console.log(queryCount.cnt);
+      // total = queryCount.cnt;
+      for (const v of verifications) {
+        console.log(v);
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      throw Ret.INTERNAL_DB_ERROR_RET;
+    });
+
+  return { total, verificationList };
+}
 
 async function checkFieldRepetition(params) {
   // 先按协议+路径查重
