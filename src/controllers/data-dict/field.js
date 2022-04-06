@@ -121,54 +121,6 @@ const Field = {
     ret.data = { list, total };
 
     return ret;
-    // // 设置参数默认值
-    // const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-    // const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
-
-    // let result = [];
-    // let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
-    // let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
-    // if (params.query !== '' && params.query !== undefined) {
-    //   querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD}
-    //     WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT ${(page - 1) * size}, ${size}`;
-    //   countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
-    //   result = Promise.all([
-    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
-    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%` } }),
-    //   ]);
-    // } else {
-    //   result = Promise.all([
-    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
-    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query } }),
-    //   ]);
-    // }
-    // await result
-    //   .then((promiseRes) => {
-    //     const [[queryResult], [[queryCount]]] = promiseRes;
-    //     const list = [];
-    //     for (const field of queryResult) {
-    //       list.push({
-    //         id: field.id,
-    //         proto_id: field.proto_id,
-    //         field_key: field.field_key,
-    //         name: field.name,
-    //         desc: field.desc,
-    //         field_type: field.field_type,
-    //         path: field.path,
-    //         remark: field.remark,
-    //         operator: field.operator,
-    //         created_time: formatTime(field.created_time),
-    //         updated_time: formatTime(field.updated_time),
-    //       });
-    //     }
-    //     ret.data = { list };
-    //     ret.total = queryCount.cnt;
-    //   })
-    //   .catch((err) => {
-    //     console.error(err);
-    //     return Ret.INTERNAL_DB_ERROR_RET;
-    //   });
-    // return ret;
   },
 };
 
