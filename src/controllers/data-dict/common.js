@@ -35,7 +35,7 @@ async function existOriginal(table, originalID) {
 }
 
 async function existData(table, id) {
-  const querySql = `SELECT COUNT(*) as cnt FROM ${table} WHERE id=:id`;
+  const querySql = `SELECT COUNT(*) as cnt FROM ${table} WHERE is_deleted=0 AND id=:id`;
   await DBClient.query(querySql, { replacements: { table, id } })
     .then(([res]) => {
       const [queryCount] = res;
@@ -52,7 +52,7 @@ async function existData(table, id) {
 
 async function existVerification(verificationIDs) {
   const existID = new Map();
-  const querySql = `SELECT id FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE id IN (:verificationIDs)`;
+  const querySql = `SELECT id FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE is_deleted=0 AND id IN (:verificationIDs)`;
   await DBClient.query(querySql, { replacements: { verificationIDs } })
     .then(([res]) => {
       for (const idObj of res) {
@@ -64,7 +64,6 @@ async function existVerification(verificationIDs) {
       console.error(err);
       throw Ret.INTERNAL_DB_ERROR_RET;
     });
-  console.log(existID);
 
   const unexsitedIDs = [];
   for (const id of verificationIDs) {

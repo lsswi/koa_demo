@@ -4,11 +4,10 @@ const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 
-// TODO 这里能删协议吗，删了其他的全部都删除？
 const Protocol = {
   /**
    * 创建协议
-   * @url /node-cgi/data-dict/event/create
+   * @url /node-cgi/data-dict/protocol/create
    */
   async create(ctx) {
     const params = ctx.request.body;
@@ -20,10 +19,12 @@ const Protocol = {
     try {
       if (params.id) {
         await common.existData(TableInfo.TABLE_PROTOCOL, params.id);
-        await updateProto(params);
+        // await updateProto(ctx.session.user.loginname, params);
+        await updateProto('joyyieli', params);
         ret.data = { id: params.id };
       } else {
-        const id = await createProto(params);
+        // const id = await createProto(ctx.session.user.loginname, params);
+        const id = await createProto('joyyieli', params);
         ret.data = { id };
       }
     } catch (err) {
@@ -37,7 +38,7 @@ const Protocol = {
 
   /**
    * 删除协议
-   * @url /node-cgi/data-dict/event/delete
+   * @url /node-cgi/data-dict/protocol/delete
    */
   async delete(ctx) {
     const params = ctx.request.body;
@@ -47,7 +48,7 @@ const Protocol = {
     }
 
     const ids = params.ids.filter(Number.isFinite);
-    const querySql = `UPDATE ${TableInfo.TABLE_PROTOCOL} SET is_deleted=0 WHERE id IN (:ids)`;
+    const querySql = `UPDATE ${TableInfo.TABLE_PROTOCOL} SET is_deleted=1 WHERE id IN (:ids)`;
     await DBClient.query(querySql, { replacements: { ids } })
       .then(() => {
         ret.data = { ids };
@@ -61,7 +62,7 @@ const Protocol = {
 
   /**
    * 查询协议
-   * @url /node-cgi/data-dict/event/query
+   * @url /node-cgi/data-dict/protocol/query
    */
   async query(ctx) {
     const ret = Ret.OK_RET;
@@ -70,17 +71,17 @@ const Protocol = {
     const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
 
     let result = [];
-    let querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL}`;
-    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL}`;
+    let querySql = `SELECT * FROM ${TableInfo.TABLE_PROTOCOL} WHERE is_deleted=0`;
+    let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_PROTOCOL} WHERE is_deleted=0`;
 
     const replacements = {};
     if (params.query !== '' && params.query !== undefined) {
-      querySql += ' WHERE is_deleted=0 AND id=:query OR name LIKE :fuzzyQuery OR operator=:query';
-      countSql += ' WHERE is_deleted=0 AND id=:query OR name LIKE :fuzzyQuery OR operator=:query';
+      querySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
+      countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
       replacements.query = params.query,
       replacements.fuzzyQuery = `%${params.query}%`;
     }
-    querySql += ` LIMIT ${page - 1},${size}`;
+    querySql += ` LIMIT ${(page - 1) * size},${size}`;
 
     result = Promise.all([
       DBClient.query(querySql, { replacements }),
@@ -104,8 +105,7 @@ const Protocol = {
             updated_time: formatTime(proto.updated_time),
           });
         }
-        ret.data = { list };
-        ret.total = queryCount.cnt;
+        ret.data = { total: queryCount.cnt, list };
       })
       .catch((err) => {
         console.error(err);
@@ -115,18 +115,17 @@ const Protocol = {
   },
 };
 
-async function createProto(params) {
+async function createProto(operator, params) {
   let id = 0;
   const querySql = `INSERT INTO ${TableInfo.TABLE_PROTOCOL}(name, proto_type, category, \`desc\`, operator)
     VALUES(:name, :protoType, :category, :desc, :operator)`;
   await DBClient.query(querySql, {
     replacements: {
+      operator,
       name: params.name,
       protoType: params.proto_type,
       category: params.category.join(','),
       desc: Object.prototype.hasOwnProperty.call(params, 'desc') ? params.desc : '',
-      // operator: ctx.session.user.loginname,
-      operator: 'joyyieli',
     },
   })
     .then(([res]) => id = res)
@@ -137,18 +136,17 @@ async function createProto(params) {
   return id;
 }
 
-async function updateProto(params) {
+async function updateProto(operator, params) {
   const querySql = `UPDATE ${TableInfo.TABLE_PROTOCOL} SET
     name=:name,proto_type=:proto_type,category=:category,\`desc\`=:desc,operator=:operator
     WHERE id=:id`;
   await DBClient.query(querySql, {
     replacements: {
+      operator,
       name: params.name,
       proto_type: params.proto_type,
       category: params.category.join(','),
       desc: params.desc,
-      // operator: ctx.session.user.loginname,
-      operator: 'joyyieli',
       id: params.id,
     },
   })
