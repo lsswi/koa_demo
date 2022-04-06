@@ -31,6 +31,7 @@ const Event = {
         await common.existData(TableInfo.TABLE_EVENT, params.id);
         // await updateEvent(ctx.session.user.loginname, params);
         await updateEvent('joyyieli', params);
+        ret.data = { id: params.id };
       } else {
         // original_id=0为创建初始版本，检测一下重复
         if (params.original_id === 0) {
@@ -45,7 +46,6 @@ const Event = {
       console.log(err);
       return Ret.UNKNOWN_RET;
     }
-
     return ret;
   },
 
@@ -245,8 +245,9 @@ async function updateEvent(operator, params) {
       }
 
       if (insertValue.length > 0) {
-        // 2. 全量ignore插入rel_event_field_verification表，实现没有的新增
-        const insertSql = `INSERT IGNORE INTO ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION}(event_id, field_verification_id) VALUES${insertValue.join(',')}`;
+        // 2. 全量 ON DUPLICATE KEY UPDATE 插入rel_event_field_verification表，实现没有的新增
+        const insertSql = `INSERT INTO ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION}(event_id, field_verification_id) VALUES${insertValue.join(',')}
+          ON DUPLICATE KEY UPDATE is_deleted=0;`;
         await DBClient.query(insertSql, { transaction });
 
         // 3. 软删除，event_id所有规则里vid不在传过来的vid的删除

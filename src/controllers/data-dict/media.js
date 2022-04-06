@@ -368,8 +368,9 @@ async function updateMedia(operator, params) {
       }
 
       if (insertValue.length > 0) {
-        // 2. 全量ignore插入rel_media_field_verification表，实现没有的新增
-        const insertSql = `INSERT IGNORE INTO ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION}(media_id, field_verification_id) VALUES${insertValue.join(',')}`;
+        // 2. 全量 ON DUPLICATE KEY UPDATE 插入rel_media_field_verification表，实现没有的新增
+        const insertSql = `INSERT INTO ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION}(media_id, field_verification_id) VALUES${insertValue.join(',')}
+          ON DUPLICATE KEY UPDATE is_deleted=0;`;
         await DBClient.query(insertSql, { transaction });
 
         // 3. 软删除，media_id所有规则里vid不在传过来的vid的删除
