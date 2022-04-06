@@ -6,11 +6,6 @@ const common = require('./common');
 
 const Field = {
   /**
-   * TODO
-   * 1. 查询加上is_deleted=0条件，改数据query返回的数据结构
-   */
-
-  /**
    * 创建字段
    * @url /node-cgi/data-dict/field/create
    */
@@ -18,18 +13,20 @@ const Field = {
     const params = ctx.request.body;
     const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
-      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, name, field_type, path, field_key can not be null' };
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, name, field_type, path, field_key, desc, remark can not be null' };
     }
 
     try {
       await common.existProto(TableInfo.TABLE_PROTOCOL, params.proto_id);
       if (params.id) {
         await common.existData(TableInfo.TABLE_FIELD, params.id);
-        await updateField(params);
+        // await updateField(ctx.session.user.loginname, params);
+        await updateField('joyyieli', params);
       } else {
         // 先按协议+路径查重
         await checkFieldRepetition(params);
-        const id = await createField(params);
+        // const id = await createField(ctx.session.user.loginname, params);
+        const id = await createField('joyyieli', params);
         ret.data = { id };
       }
     } catch (err) {
@@ -52,8 +49,8 @@ const Field = {
     }
 
     try {
+      const ids = params.ids.filter(Number.isFinite);
       await DBClient.transaction(async (transaction) => {
-        const ids = params.ids.filter(Number.isFinite);
         // 删除字段数据源
         await DBClient.query(`UPDATE ${TableInfo.TABLE_FIELD} SET is_deleted=1 WHERE id IN (:ids)`, {
           replacements: { ids },
@@ -87,11 +84,11 @@ const Field = {
           transaction,
         });
       });
+      ret.data = { ids };
     } catch (err) {
       console.error(err);
       return Ret.INTERNAL_DB_ERROR_RET;
     }
-
     return ret;
   },
 
@@ -101,7 +98,6 @@ const Field = {
    */
   async query(ctx) {
     const params = ctx.query;
-    console.log(params.query);
     const ret = Ret.OK_RET;
     if (!checkQueryParams(params)) {
       return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
@@ -109,7 +105,6 @@ const Field = {
 
     const { total, verificationList } = await queryFields(params);
     const verificationObj = formVerificationObj(verificationList);
-    console.log(verificationObj);
     const list = [];
     const isPush = new Map();
     for (const v of verificationList) {
@@ -119,56 +114,7 @@ const Field = {
       }
     }
     ret.data = { list, total };
-
     return ret;
-    // // 设置参数默认值
-    // const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-    // const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.page : 10;
-
-    // let result = [];
-    // let querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id LIMIT ${(page - 1) * size}, ${size}`;
-    // let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
-    // if (params.query !== '' && params.query !== undefined) {
-    //   querySql = `SELECT * FROM ${TableInfo.TABLE_FIELD}
-    //     WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query) LIMIT ${(page - 1) * size}, ${size}`;
-    //   countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id AND (id=:query OR name LIKE :name OR operator=:query)`;
-    //   result = Promise.all([
-    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%`, offset: page - 1, size } }),
-    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query, name: `%${params.query}%` } }),
-    //   ]);
-    // } else {
-    //   result = Promise.all([
-    //     DBClient.query(querySql, { replacements: { proto_id: params.proto_id, offset: page - 1, size } }),
-    //     DBClient.query(countSql, { replacements: { proto_id: params.proto_id, query: params.query } }),
-    //   ]);
-    // }
-    // await result
-    //   .then((promiseRes) => {
-    //     const [[queryResult], [[queryCount]]] = promiseRes;
-    //     const list = [];
-    //     for (const field of queryResult) {
-    //       list.push({
-    //         id: field.id,
-    //         proto_id: field.proto_id,
-    //         field_key: field.field_key,
-    //         name: field.name,
-    //         desc: field.desc,
-    //         field_type: field.field_type,
-    //         path: field.path,
-    //         remark: field.remark,
-    //         operator: field.operator,
-    //         created_time: formatTime(field.created_time),
-    //         updated_time: formatTime(field.updated_time),
-    //       });
-    //     }
-    //     ret.data = { list };
-    //     ret.total = queryCount.cnt;
-    //   })
-    //   .catch((err) => {
-    //     console.error(err);
-    //     return Ret.INTERNAL_DB_ERROR_RET;
-    //   });
-    // return ret;
   },
 };
 
@@ -176,7 +122,7 @@ function formVerificationObj(verificationList) {
   const verificationObj = new Map();
   for (const v of verificationList) {
     if (!verificationObj.has(v.field_id)) {
-      const tmpObj = {
+      const tmpFieldObj = {
         id: v.field_id,
         field_key: v.field_key,
         name: v.name,
@@ -188,18 +134,30 @@ function formVerificationObj(verificationList) {
         updated_time: formatTime(v.field_time),
       };
       if (v.verification_id !== null) {
-        tmpObj.verification_list = [{
+        tmpFieldObj.verification_list = [{
           id: v.verification_id,
+          field_key: v.field_key,
+          name: v.name,
+          desc: v.desc,
+          field_type: v.field_type,
+          path: v.path,
+          remark: v.remark,
           rule_id: v.rule_id,
           value: v.verification_value,
           operator: v.verification_operator,
-          updated_time: v.verification_time,
+          updated_time: formatTime(v.verification_time),
         }];
       }
-      verificationObj.set(v.field_id, tmpObj);
+      verificationObj.set(v.field_id, tmpFieldObj);
     } else {
       verificationObj.get(v.field_id).verification_list.push({
         id: v.verification_id,
+        field_key: v.field_key,
+        name: v.name,
+        desc: v.desc,
+        field_type: v.field_type,
+        path: v.path,
+        remark: v.remark,
         rule_id: v.rule_id,
         value: v.verification_value,
         operator: v.verification_operator,
@@ -223,7 +181,7 @@ async function queryFields(params) {
 	 * LEFT JOIN data_dict_field_verification t2 ON t1.id=t2.field_id AND t2.is_deleted=0 ORDER BY t1.id;
    */
   let subQuerySql = `SELECT * FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
-  let countSql = `SELECT COUNT(*) FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
+  let countSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE is_deleted=0 AND proto_id=:proto_id`;
   if (params.query !== undefined && params.query !== '') {
     subQuerySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
     countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
@@ -248,11 +206,6 @@ async function queryFields(params) {
       const [[verifications], [[queryCount]]] = promiseRes;
       total = queryCount.cnt;
       verificationList = verifications;
-      console.log(queryCount.cnt);
-      // total = queryCount.cnt;
-      for (const v of verifications) {
-        console.log(v);
-      }
     })
     .catch((err) => {
       console.error(err);
@@ -279,12 +232,13 @@ async function checkFieldRepetition(params) {
     });
 }
 
-async function createField(params) {
+async function createField(operator, params) {
   let id = 0;
   const querySql = `INSERT INTO ${TableInfo.TABLE_FIELD}(proto_id, field_key, name, \`desc\`, field_type, path, remark, operator)
         VALUES(:proto_id, :field_key, :name, :desc, :field_type, :path, :remark, :operator)`;
   await DBClient.query(querySql, {
     replacements: {
+      operator,
       proto_id: params.proto_id,
       field_key: params.field_key,
       name: params.name,
@@ -292,8 +246,6 @@ async function createField(params) {
       field_type: params.field_type,
       path: params.path,
       remark: params.remark,
-      // operator: ctx.session.user.loginname,
-      operator: 'joyyieli',
     } })
     .then(([res]) => {
       id = res;
@@ -304,12 +256,13 @@ async function createField(params) {
   return id;
 }
 
-async function updateField(params) {
+async function updateField(operator, params) {
   const querySql = `UPDATE ${TableInfo.TABLE_FIELD}
-      SET proto_id=:proto_id, field_key=:field_key, name=:name, \`desc\`=:desc, field_type=:field_type, path=:path, remark=:remark
+      SET proto_id=:proto_id, field_key=:field_key, name=:name, \`desc\`=:desc, field_type=:field_type, path=:path, remark=:remark, operator=:operator
       WHERE id=:id`;
   await DBClient.query(querySql, {
     replacements: {
+      operator,
       proto_id: params.proto_id,
       field_key: params.field_key,
       name: params.name,

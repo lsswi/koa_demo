@@ -12,7 +12,7 @@ const FieldVerification = {
     const params = ctx.request.body;
     const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
-      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, field_id, rule_id can not be null' };
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, field_id, rule_id, verification_value can not be null' };
     }
 
     try {
@@ -20,11 +20,13 @@ const FieldVerification = {
       // 传了id，update
       if (params.id) {
         await common.existData(TableInfo.TABLE_FIELD_VERIFICATION, params.id);
-        await updateVerification(params);
+        // await updateVerification(ctx.session.user.loginname, params);
+        await updateVerification('joyyieli', params);
         ret.data = { id: params.id };
       } else {
-        await existVerificationRepetition(params.field_id, params.rule_id);
-        const id = await createVerification(params);
+        await existVerificationRepetition(params);
+        // const id = await createVerification(ctx.session.user.loginname, params);
+        const id = await createVerification('joyyieli', params);
         ret.data = { id };
       }
     } catch (err) {
@@ -50,23 +52,24 @@ const FieldVerification = {
     }
 
     try {
+      const ids = params.ids.filter(Number.isFinite);
       await DBClient.transaction(async (transaction) => {
-        const ids = params.ids.filter(Number.isFinite);
         // 删除规则源数据
-        await DBClient.query(`UDPATE ${TableInfo.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE id IN (:ids)`, {
           replacements: { ids },
           transaction });
 
         // 删除规则流量关联
-        await DBClient.query(`UDPATE ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
           replacements: { ids },
           transaction });
 
         // 删除规则事件关联
-        await DBClient.query(`UDPATE ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
           replacements: { ids },
           transaction });
       });
+      ret.data = { ids };
     } catch (err) {
       console.error(err);
       return Ret.INTERNAL_DB_ERROR_RET;
@@ -92,14 +95,19 @@ async function existField(fieldID) {
     });
 }
 
-async function existVerificationRepetition(fieldID, ruleID) {
+async function existVerificationRepetition(params) {
   // 校验字段规则是否存在
-  const checkRuleSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE field_id=:fieldID AND rule_id=:ruleID`;
-  await DBClient.query(checkRuleSql, { replacements: { fieldID, ruleID } })
+  const checkRuleSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE field_id=:field_id AND rule_id=:rule_id AND verification_value=:verification_value`;
+  await DBClient.query(checkRuleSql, { replacements: {
+    field_id: params.field_id,
+    rule_id: params.rule_id,
+    verification_value: params.verification_value,
+  },
+  })
     .then(([res]) => {
       const [queryCount] = res;
       if (queryCount.cnt > 0) {
-        throw { ret: Ret.CODE_EXISTED, msg: `field_id ${fieldID} has existed rule_id ${ruleID}` };
+        throw { ret: Ret.CODE_EXISTED, msg: `field_id ${params.field_id} has existed rule_id ${params.rule_id} and value: ${params.verification_value}` };
       }
     })
     .catch((err) => {
@@ -109,16 +117,16 @@ async function existVerificationRepetition(fieldID, ruleID) {
     });
 }
 
-async function createVerification(params) {
+async function createVerification(operator, params) {
   let id = 0;
   const insertSql = `INSERT INTO ${TableInfo.TABLE_FIELD_VERIFICATION}(field_id, rule_id, verification_value, operator)
     VALUES(:field_id, :rule_id, :verification_value, :operator)`;
   await DBClient.query(insertSql, {
     replacements: {
+      operator,
       field_id: params.field_id,
       rule_id: params.rule_id,
       verification_value: params.verification_value,
-      operator: 'joyyieli',
     },
   })
     .then(([res]) => id = res)
@@ -129,18 +137,17 @@ async function createVerification(params) {
   return id;
 }
 
-async function updateVerification(params) {
+async function updateVerification(operator, params) {
   const querySql = `UPDATE ${TableInfo.TABLE_FIELD_VERIFICATION}
-    SET rule_id=:rule_id, field_id=:field_id, verification_value=:verification_value, operator:operator
+    SET rule_id=:rule_id, field_id=:field_id, verification_value=:verification_value, operator=:operator
     WHERE id=:id`;
   await DBClient.query(querySql, {
     replacements: {
+      operator,
       rule_id: params.rule_id,
       field_id: params.field_id,
       verification_value: params.verification_value,
       id: params.id,
-      // operator: ctx.session.user.loginname
-      operator: 'joyyieli',
     },
   })
     .catch((err) => {

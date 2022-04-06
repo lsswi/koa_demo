@@ -13,12 +13,15 @@ const Event = {
     const params = ctx.request.body;
     const ret = Ret.OK_RET;
     if (!checkCreateParams(params)) {
-      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, proto_id, original_id, category, name, desc, definition_val, reporting_timing, remark, rule_list can not be null' };
+      return {
+        ret: Ret.CODE_PARAM_ERROR,
+        msg: 'params error, proto_id, original_id, category, name, desc, definition_val, reporting_timing, remark, verification_list can not be null',
+      };
     }
 
     try {
       await common.existProto(TableInfo.TABLE_PROTOCOL, params.proto_id);
-      await common.existVerification(params.rule_list);
+      await common.existVerification(params.verification_list);
       // original_id !=0 检查一下主数据是否存在
       if (params.original_id !== 0) {
         await common.existOriginal(TableInfo.TABLE_MEDIA, params.original_id);
@@ -26,17 +29,20 @@ const Event = {
       // 传了id，update数据
       if (params.id) {
         await common.existData(TableInfo.TABLE_EVENT, params.id);
-        await updateEvent(params);
+        // await updateEvent(ctx.session.user.loginname, params);
+        await updateEvent('joyyieli', params);
       } else {
         // original_id=0为创建初始版本，检测一下重复
         if (params.original_id === 0) {
           await checkEventRepetition(params);
         }
-        const id = await createEvent(params);
+        // const id = await createEvent(ctx.session.user.loginname, params);
+        const id = await createEvent('joyyieli', params);
         ret.data = { id };
       }
     } catch (err) {
       if (err.ret) return err;
+      console.log(err);
       return Ret.UNKNOWN_RET;
     }
 
@@ -55,8 +61,8 @@ const Event = {
     }
 
     try {
+      const ids = params.ids.filter(Number.isFinite);
       await DBClient.transaction(async (transaction) => {
-        const ids = params.ids.filter(Number.isFinite);
         // 删除事件源数据
         await DBClient.query(`UPDATE ${TableInfo.TABLE_EVENT} SET is_deleted=1 WHERE id IN (:ids)`, {
           replacements: { ids },
@@ -75,6 +81,7 @@ const Event = {
           transaction,
         });
       });
+      ret.data = { ids };
     } catch (err) {
       console.error(err);
       return Ret.INTERNAL_DB_ERROR_RET;
@@ -100,6 +107,10 @@ const Event = {
       // eventInfo: event_id -> event信息的映射
       // mainSubIDs: main的event_id对应的subID列表的映射
       const { total, allEID, mainEIDList, eventInfo, mainSubIDs } = await queryEvents(params);
+      if (allEID.length === 0) {
+        ret.data = { total, list: [] };
+        return ret;
+      }
       const eventObj = await queryEventField(eventInfo, allEID, params.proto_id);
 
       // 没有规则的，设置一下基础信息
@@ -136,14 +147,14 @@ const Event = {
       ret.data = { list, total };
     } catch (err) {
       if (err.ret) return err;
-      console.log(err);
+      console.error(err);
       return Ret.UNKNOWN_RET;
     }
     return ret;
   },
 };
 
-async function createEvent(params) {
+async function createEvent(operator, params) {
   let id = 0;
   try {
     await DBClient.transaction(async (transaction) => {
@@ -153,6 +164,7 @@ async function createEvent(params) {
         VALUES(:proto_id, :category, :original_id, :name, :desc, :definition_val, MD5(:definition_val), :reporting_timing, :status, :remark, :operator)`;
       const [eventID] = await DBClient.query(insertEventSql, {
         replacements: {
+          operator,
           proto_id: params.proto_id,
           category: params.category,
           original_id: params.original_id,
@@ -162,7 +174,6 @@ async function createEvent(params) {
           reporting_timing: params.reporting_timing,
           status: params.status,
           remark: params.remark,
-          operator: 'joyyieli',
         },
         transaction,
       });
@@ -171,7 +182,7 @@ async function createEvent(params) {
       // 创建事件和字段规则的关联
       const insertValue = [];
       const insertRelSql = `INSERT INTO ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION}(event_id, field_verification_id) VALUES`;
-      for (const rule_id of params.rule_list.filter(Number.isFinite)) {
+      for (const rule_id of params.verification_list.filter(Number.isFinite)) {
         insertValue.push(`(${eventID}, ${rule_id})`);
       }
       if (insertValue.length > 0) {
@@ -202,7 +213,7 @@ async function checkEventRepetition(params) {
     });
 }
 
-async function updateEvent(params) {
+async function updateEvent(operator, params) {
   try {
     await DBClient.transaction(async (transaction) => {
       // 1. 更新事件源数据
@@ -213,6 +224,7 @@ async function updateEvent(params) {
         WHERE id=:id`;
       await DBClient.query(updateSql, {
         replacements: {
+          operator,
           proto_id: params.proto_id,
           category: params.category,
           original_id: params.original_id,
@@ -222,14 +234,13 @@ async function updateEvent(params) {
           reporting_timing: params.reporting_timing,
           status: params.status,
           remark: params.remark,
-          operator: 'joyyieli',
           id: params.id,
         },
       });
 
       // 构造插入values语句
       const insertValue = [];
-      for (const rule_id of params.rule_list.filter(Number.isFinite)) {
+      for (const rule_id of params.verification_list.filter(Number.isFinite)) {
         insertValue.push(`(${params.id}, ${rule_id})`);
       }
 
@@ -241,7 +252,7 @@ async function updateEvent(params) {
         // 3. 软删除，event_id所有规则里vid不在传过来的vid的删除
         const deleteSql = `UPDATE ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE event_id=:eventID AND field_verification_id NOT IN (:ids)`;
         await DBClient.query(deleteSql, {
-          replacements: { eventID: params.id, ids: params.rule_list.filter(Number.isFinite) },
+          replacements: { eventID: params.id, ids: params.verification_list.filter(Number.isFinite) },
           transaction,
         });
       }
@@ -319,7 +330,7 @@ async function queryEvents(params) {
 
   // 查询替换参数
   const replacements = { proto_id: params.proto_id };
-  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=${params.proto_id} LIMIT ${(page - 1) * size}, ${size}`;
+  let mainQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id=0 AND proto_id=${params.proto_id}`;
   /**
    * SELECT COUNT(*) as cnt FROM data_dict_event
    *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6' OR definition_val LIKE '%6%')
@@ -336,6 +347,7 @@ async function queryEvents(params) {
     replacements.query = params.query;
     replacements.fuzzyQuery = `%${params.query}%`;
   }
+  mainQuerySql += ` LIMIT ${(page - 1) * size}, ${size}`;
 
   let total = 0;
   // 所有的event_id，main和sub的event_id集合
@@ -362,11 +374,15 @@ async function queryEvents(params) {
       throw Ret.INTERNAL_DB_ERROR_RET;
     });
 
+  if (allEID.length === 0) {
+    return { total, allEID };
+  }
+
   /**
    * 查所有主event的所有子event
    * SELECT * FORM event WHERE is_deleted=0 AND original_id IN (1, 2, 3);
    */
-  const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE original_id IN (:ids)`;
+  const subQuerySql = `SELECT * FROM ${TableInfo.TABLE_EVENT} WHERE is_deleted=0 AND original_id IN (:ids)`;
   const mainSubIDs = new Map();
   await DBClient.query(subQuerySql, { replacements: { ids: mainEIDList } })
     .then((res) => {
@@ -392,7 +408,7 @@ async function queryEvents(params) {
 function checkCreateParams(params) {
   if (params.proto_id === undefined || params.original_id === undefined || params.category === undefined || params.name === undefined
     || params.desc === undefined || params.definition_val === undefined || params.reporting_timing === undefined
-    || params.remark === undefined || params.rule_list === undefined || params.status === undefined) {
+    || params.remark === undefined || params.verification_list === undefined || params.status === undefined) {
     return false;
   }
   return true;
