@@ -4,6 +4,12 @@ const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 
+// event的开关状态
+const STATUS = {
+  OFF: 0,
+  ON: 1,
+};
+
 const Event = {
   /**
    * 创建/编辑事件
@@ -148,6 +154,28 @@ const Event = {
     } catch (err) {
       if (err.ret) return err;
       console.error(err);
+      return Ret.UNKNOWN_RET;
+    }
+    return ret;
+  },
+
+  /**
+   * 改变事件状态
+   * @url /node-cgi/data-dict/event/change-status
+   */
+  async changeStatus(ctx) {
+    const params = ctx.request.body;
+    const ret = Ret.OK_RET;
+    if (!checkChangeStatusParams(params)) {
+      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, event_id, status can not be null, status should be 0 or 1' };
+    }
+    try {
+      await common.existData(TableInfo.TABLE_EVENT, params.event_id);
+      await changeStatus(params.event_id, params.status);
+      ret.data = { id: params.event_id };
+    } catch (err) {
+      if (err.ret) return err;
+      console.log(err);
       return Ret.UNKNOWN_RET;
     }
     return ret;
@@ -406,6 +434,14 @@ async function queryEvents(params) {
   return { total, allEID, mainEIDList, eventInfo, mainSubIDs };
 }
 
+async function changeStatus(id, status) {
+  await DBClient.query(`UPDATE ${TableInfo.TABLE_EVENT} SET status=:status WHERE id=:id`, { replacements: { status, id } })
+    .catch((err) => {
+      console.error(err);
+      throw Ret.INTERNAL_DB_ERROR_RET;
+    });
+}
+
 function checkCreateParams(params) {
   if (params.proto_id === undefined || params.original_id === undefined || params.category === undefined || params.name === undefined
     || params.desc === undefined || params.definition_val === undefined || params.reporting_timing === undefined
@@ -417,6 +453,13 @@ function checkCreateParams(params) {
 
 function checkQueryParams(params) {
   if (params.proto_id === undefined) {
+    return false;
+  }
+  return true;
+}
+
+function checkChangeStatusParams(params) {
+  if (params.event_id === undefined || params.status === undefined || (params.status !== STATUS.OFF && params.status !== STATUS.ON)) {
     return false;
   }
   return true;

@@ -8,7 +8,7 @@ async function existProto(table, protoID) {
     .then(([res]) => {
       const [queryCount] = res;
       if (queryCount.cnt === 0) {
-        throw { ret: Ret.CODE_EXISTED, msg: `proto_id: ${protoID} is not exist` };
+        throw { ret: Ret.CODE_NOT_EXISTED, msg: `proto_id: ${protoID} is not exist` };
       }
     })
     .catch((err) => {
@@ -24,7 +24,7 @@ async function existOriginal(table, originalID) {
     .then(([res]) => {
       const [queryCount] = res;
       if (queryCount.cnt === 0) {
-        throw { ret: Ret.CODE_EXISTED, msg: `original_id: ${originalID} is not exist` };
+        throw { ret: Ret.CODE_NOT_EXISTED, msg: `original_id: ${originalID} is not exist` };
       }
     })
     .catch((err) => {
@@ -40,7 +40,7 @@ async function existData(table, id) {
     .then(([res]) => {
       const [queryCount] = res;
       if (queryCount.cnt === 0) {
-        throw { ret: Ret.CODE_EXISTED, msg: `id: ${id} is not exist` };
+        throw { ret: Ret.CODE_NOT_EXISTED, msg: `id: ${id} is not exist` };
       }
     })
     .catch((err) => {

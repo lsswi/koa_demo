@@ -5,6 +5,10 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 
 const Protocol = {
+  async hello(ctx) {
+    return { ret: 0, msg: 'hello' };
+  },
+
   /**
    * 创建协议
    * @url /node-cgi/data-dict/protocol/create
