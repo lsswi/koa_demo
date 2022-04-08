@@ -459,8 +459,7 @@ async function bindMediaEvent(params) {
   for (const id of params.event_ids.filter(Number.isFinite)) {
     insertValue.push(`(${params.media_id}, ${id})`);
   }
-  console.log(insertValue);
-  const querySql = `INSERT IGNORE INTO ${TableInfo.TABLE_REL_MEDIA_EVENT}(media_id, event_id) VALUES${insertValue.join(',')}`;
+  const querySql = `INSERT INTO ${TableInfo.TABLE_REL_MEDIA_EVENT}(media_id, event_id) VALUES${insertValue.join(',')} ON DUPLICATE KEY UPDATE is_deleted=0`;
   if (insertValue.length > 0) {
     await DBClient.query(querySql)
       .catch((err) => {

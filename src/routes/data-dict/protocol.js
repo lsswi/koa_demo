@@ -6,6 +6,9 @@ async function func(ctx, next) {
 
   let result = { ret: -10, msg: '无效action' };
   switch (action) {
+    case 'hello':
+      result = await Protocol.hello(ctx);
+      break;
     case 'create':
       result = await Protocol.create(ctx);
       break;

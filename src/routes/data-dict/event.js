@@ -15,6 +15,9 @@ async function func(ctx, next) {
     case 'query':
       result = await Event.query(ctx);
       break;
+    case 'change-status':
+      result = await Event.changeStatus(ctx);
+      break;
     default:
       break;
   }
