@@ -2,6 +2,23 @@ const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 
+const STR_FORMAT = {
+  PARAM_ERROR: 'params error, need params ',
+};
+
+function checkCreateParams(params, paramList) {
+  const lackField = [];
+  for (const k of paramList) {
+    if (params[k] === undefined) {
+      lackField.push(k);
+    }
+  }
+  if (lackField.length > 0) {
+    return `${STR_FORMAT.PARAM_ERROR}${lackField.join(', ')}`;
+  }
+  return '';
+}
+
 async function existProto(table, protoID) {
   const querySql = `SELECT COUNT(*) as cnt FROM ${table} WHERE id=:protoID`;
   await DBClient.query(querySql, { replacements: { table, protoID } })
@@ -82,4 +99,6 @@ module.exports = {
   existOriginal,
   existData,
   existVerification,
+  checkCreateParams,
+  STR_FORMAT,
 };

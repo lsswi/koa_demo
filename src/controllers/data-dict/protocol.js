@@ -6,6 +6,9 @@ const common = require('./common');
 
 const Protocol = {
   async hello(ctx) {
+    console.log(typeof ctx.query.category);
+    console.log(ctx.query.category);
+    // DBLib.tt();
     return { ret: 0, msg: 'hello' };
   },
 
@@ -16,8 +19,9 @@ const Protocol = {
   async create(ctx) {
     const params = ctx.request.body;
     const ret = Ret.OK_RET;
-    if (!checkCreateParams(params)) {
-      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param name, proto_type can not be null, category must be int array' };
+    const errMsg = common.checkCreateParams(params, ['name', 'category', 'proto_type', 'desc']);
+    if (errMsg.length !== 0) {
+      return { ret: Ret.CODE_PARAM_ERROR, msg: errMsg };
     }
 
     try {
@@ -158,13 +162,6 @@ async function updateProto(operator, params) {
       console.error(err);
       throw Ret.INTERNAL_DB_ERROR_RET;
     });
-}
-
-function checkCreateParams(params) {
-  if (params.name === undefined || params.category === undefined || params.proto_type === undefined || params.desc === undefined) {
-    return false;
-  }
-  return true;
 }
 
 function checkDeleteParams(params) {
