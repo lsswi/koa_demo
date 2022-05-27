@@ -4,12 +4,27 @@ const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 
+async function aaa() {
+  await bbb();
+  // await bbb()
+  // .then().catch((err) => {
+  // throw err;
+  // });
+}
+
+function bbb() {
+  return new Promise((resolve, reject) => {
+    reject('nihao');
+  });
+}
+
 const Protocol = {
   async hello(ctx) {
-    console.log(typeof ctx.query.category);
-    console.log(ctx.query.category);
-    // DBLib.tt();
-    return { ret: 0, msg: 'hello' };
+    try {
+      await aaa();
+    } catch (err) {
+      console.log(err);
+    }
   },
 
   /**
