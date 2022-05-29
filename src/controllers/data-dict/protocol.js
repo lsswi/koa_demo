@@ -3,9 +3,12 @@ const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
+const moment = require('moment');
 
 const Protocol = {
   async hello(ctx) {
+    const t = '2022-04-07T07:27:54.000Z';
+    console.log(moment(t).format('YYYY-MM-DD HH:mm:ss'));
     return { ret: 0, msg: 'hello' };
   },
 
