@@ -20,18 +20,28 @@ const abc = () => {
   }
 };
 
-module.exports = {
-  ddd,
-  age: 11,
-  abc,
-  set header(name) {
-    this.req = name;
-    console.log(this.req);
-  },
-  get header() {
-    return this.req;
-  },
-  tFunc() {
-    console.log('get req in tFunc: ', this.req);
+// module.exports = {
+//   ddd,
+//   age: 11,
+//   abc,
+//   set header(name) {
+//     this.req = name;
+//     console.log(this.req);
+//   },
+//   get header() {
+//     return this.req;
+//   },
+//   tFunc() {
+//     console.log('get req in tFunc: ', this.req);
+//   },
+// };
+
+exports.MYSQL_CONF = {
+  DATA_DICT: {
+    account: 'user_qzone',
+    password: 'qzone',
+    dbName: 'pushmail_stat',
+    ip: '9.138.136.15',
+    port: '3306',
   },
 };

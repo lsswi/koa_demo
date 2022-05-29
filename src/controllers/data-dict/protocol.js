@@ -5,11 +5,27 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 const moment = require('moment');
 
+async function aaa() {
+  await bbb();
+  // await bbb()
+  // .then().catch((err) => {
+  // throw err;
+  // });
+}
+
+function bbb() {
+  return new Promise((resolve, reject) => {
+    reject('nihao');
+  });
+}
+
 const Protocol = {
   async hello(ctx) {
-    const t = '2022-04-07T07:27:54.000Z';
-    console.log(moment(t).format('YYYY-MM-DD HH:mm:ss'));
-    return { ret: 0, msg: 'hello' };
+    try {
+      await aaa();
+    } catch (err) {
+      console.log(err);
+    }
   },
 
   /**
@@ -19,8 +35,9 @@ const Protocol = {
   async create(ctx) {
     const params = ctx.request.body;
     const ret = Ret.OK_RET;
-    if (!checkCreateParams(params)) {
-      return { ret: Ret.CODE_PARAM_ERROR, msg: 'params error, param name, proto_type can not be null, category must be int array' };
+    const errMsg = common.checkCreateParams(params, ['name', 'category', 'proto_type', 'desc']);
+    if (errMsg.length !== 0) {
+      return { ret: Ret.CODE_PARAM_ERROR, msg: errMsg };
     }
 
     try {
@@ -161,13 +178,6 @@ async function updateProto(operator, params) {
       console.error(err);
       throw Ret.INTERNAL_DB_ERROR_RET;
     });
-}
-
-function checkCreateParams(params) {
-  if (params.name === undefined || params.category === undefined || params.proto_type === undefined || params.desc === undefined) {
-    return false;
-  }
-  return true;
 }
 
 function checkDeleteParams(params) {
