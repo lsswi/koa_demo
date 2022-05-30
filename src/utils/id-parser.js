@@ -11,6 +11,7 @@ function parseRuleID(ruleID) {
   // 十进制
   const typeDeNum = parseInt(typebNum, 2);
   return {
+    rule_id: ruleID,
     verification_type: typeDeNum,
     media_id: (ruleID >> 16) & 0x1ffff,
     rel_id: ruleID & 0xffff,

@@ -8,7 +8,7 @@ const Ret = {
   UNKNOWN_RET: { ret: 60000, msg: 'unkonw error' },
 };
 
-const TableInfo = {
+const TABLE_INFO = {
   TABLE_PROTOCOL: 'data_dict_protocol',
   TABLE_FIELD: 'data_dict_field',
   TABLE_EVENT: 'data_dict_event',
@@ -19,4 +19,4 @@ const TableInfo = {
   TABLE_REL_EVENT_FIELD_VERIFICATION: 'data_dict_rel_event_field_verification',
 };
 
-module.exports = { Ret, TableInfo };
+module.exports = { Ret, TABLE_INFO };
