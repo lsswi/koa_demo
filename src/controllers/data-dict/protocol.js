@@ -3,9 +3,11 @@ const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
+const moment = require('moment');
 
-function ccc() {
-  return { h1: 'nihao', h2: 'hhh', h3: 123 };
+function ccc(mp, sl) {
+  mp.set(1, 'hello');
+  sl.push(1);
 }
 
 function bbb(d) {
@@ -14,7 +16,7 @@ function bbb(d) {
 
 const Protocol = {
   async hello(ctx) {
-    bbb(ccc());
+    console.log(`${`daily_verification_result_${moment().subtract(1, 'days').startOf('day').format('YYYY_MM_DD')}`}`);
   },
 
   /**
