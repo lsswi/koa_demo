@@ -3,28 +3,20 @@ const DBClient = DBLib.getDBPool();
 const { Ret, TableInfo } = require('./const');
 const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
+const moment = require('moment');
 
-async function aaa() {
-  await bbb();
-  // await bbb()
-  // .then().catch((err) => {
-  // throw err;
-  // });
+function ccc(mp, sl) {
+  mp.set(1, 'hello');
+  sl.push(1);
 }
 
-function bbb() {
-  return new Promise((resolve, reject) => {
-    reject('nihao');
-  });
+function bbb(d) {
+  console.log(d);
 }
 
 const Protocol = {
   async hello(ctx) {
-    try {
-      await aaa();
-    } catch (err) {
-      console.log(err);
-    }
+    console.log(`${`daily_verification_result_${moment().subtract(1, 'days').startOf('day').format('YYYY_MM_DD')}`}`);
   },
 
   /**

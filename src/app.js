@@ -8,7 +8,7 @@ const { dumpVerificationResult } = require('./scheduler/data-dict');
 // const { Hello, DB, address } = require('./lib');
 // const hello = require('./lib/hello');
 
-schedule.scheduleJob('*/20 * * * * *', dumpVerificationResult);
+// schedule.scheduleJob('*/20 * * * * *', dumpVerificationResult);
 
 app.use(koaBody()).use(router.routes()).use(router.allowedMethods());
 
