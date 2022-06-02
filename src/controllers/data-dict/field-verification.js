@@ -1,6 +1,6 @@
 const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
-const { Ret, TableInfo } = require('./const');
+const { Ret, TABLE_INFO } = require('./const');
 const common = require('./common');
 
 const FieldVerification = {
@@ -19,7 +19,7 @@ const FieldVerification = {
       await existField(params.field_id);
       // 传了id，update
       if (params.id) {
-        await common.existData(TableInfo.TABLE_FIELD_VERIFICATION, params.id);
+        await common.existData(TABLE_INFO.TABLE_FIELD_VERIFICATION, params.id);
         // await updateVerification(ctx.session.user.loginname, params);
         await updateVerification('joyyieli', params);
         ret.data = { id: params.id };
@@ -55,17 +55,17 @@ const FieldVerification = {
       const ids = params.ids.filter(Number.isFinite);
       await DBClient.transaction(async (transaction) => {
         // 删除规则源数据
-        await DBClient.query(`UPDATE ${TableInfo.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TABLE_INFO.TABLE_FIELD_VERIFICATION} SET is_deleted=1 WHERE id IN (:ids)`, {
           replacements: { ids },
           transaction });
 
         // 删除规则流量关联
-        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
           replacements: { ids },
           transaction });
 
         // 删除规则事件关联
-        await DBClient.query(`UPDATE ${TableInfo.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
+        await DBClient.query(`UPDATE ${TABLE_INFO.TABLE_REL_EVENT_FIELD_VERIFICATION} SET is_deleted=1 WHERE field_verification_id IN (:ids)`, {
           replacements: { ids },
           transaction });
       });
@@ -80,7 +80,7 @@ const FieldVerification = {
 
 async function existField(fieldID) {
 // 校验字段是否存在
-  const checkFieldSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD} WHERE id=:id`;
+  const checkFieldSql = `SELECT COUNT(*) as cnt FROM ${TABLE_INFO.TABLE_FIELD} WHERE id=:id`;
   await DBClient.query(checkFieldSql, { replacements: { id: fieldID } })
     .then(([res]) => {
       const [queryCount] = res;
@@ -97,7 +97,7 @@ async function existField(fieldID) {
 
 async function existVerificationRepetition(params) {
   // 校验字段规则是否存在
-  const checkRuleSql = `SELECT COUNT(*) as cnt FROM ${TableInfo.TABLE_FIELD_VERIFICATION} WHERE field_id=:field_id AND rule_id=:rule_id AND verification_value=:verification_value`;
+  const checkRuleSql = `SELECT COUNT(*) as cnt FROM ${TABLE_INFO.TABLE_FIELD_VERIFICATION} WHERE field_id=:field_id AND rule_id=:rule_id AND verification_value=:verification_value`;
   await DBClient.query(checkRuleSql, { replacements: {
     field_id: params.field_id,
     rule_id: params.rule_id,
@@ -119,7 +119,7 @@ async function existVerificationRepetition(params) {
 
 async function createVerification(operator, params) {
   let id = 0;
-  const insertSql = `INSERT INTO ${TableInfo.TABLE_FIELD_VERIFICATION}(field_id, rule_id, verification_value, operator)
+  const insertSql = `INSERT INTO ${TABLE_INFO.TABLE_FIELD_VERIFICATION}(field_id, rule_id, verification_value, operator)
     VALUES(:field_id, :rule_id, :verification_value, :operator)`;
   await DBClient.query(insertSql, {
     replacements: {
@@ -138,7 +138,7 @@ async function createVerification(operator, params) {
 }
 
 async function updateVerification(operator, params) {
-  const querySql = `UPDATE ${TableInfo.TABLE_FIELD_VERIFICATION}
+  const querySql = `UPDATE ${TABLE_INFO.TABLE_FIELD_VERIFICATION}
     SET rule_id=:rule_id, field_id=:field_id, verification_value=:verification_value, operator=:operator
     WHERE id=:id`;
   await DBClient.query(querySql, {

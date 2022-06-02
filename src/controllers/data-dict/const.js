@@ -1,4 +1,4 @@
-const Ret = {
+const RET = {
   CODE_PARAM_ERROR: 40001,
   CODE_EXISTED: 40002,
   CODE_NOT_EXISTED: 40003,
@@ -19,4 +19,4 @@ const TABLE_INFO = {
   TABLE_REL_EVENT_FIELD_VERIFICATION: 'data_dict_rel_event_field_verification',
 };
 
-module.exports = { Ret, TABLE_INFO };
+module.exports = { RET, TABLE_INFO };

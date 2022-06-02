@@ -14,9 +14,48 @@ function bbb(d) {
   console.log(d);
 }
 
+async function c(transaction) {
+  const querySql1 = 'INSERT INTO data_dict_rel_media_event(media_id, event_id ,operator) VALUES(100, 200, \'abc\')';
+  await DBClient.query(querySql1, { transaction });
+}
+
+async function d(transaction) {
+  const querySql = 'SELECT 1';
+  await DBClient.query(querySql, { transaction });
+}
+
 const Protocol = {
+  /**
+   * 排序校验规则列表，把默认规则放到最前面
+   */
+  sortVerificationList(verificationList) {
+    let defaultIndex = 0;
+    for (let i = 0; i < verificationList.length; i++) {
+      if (verificationList[i].rule_id === 7) {
+        defaultIndex = i;
+      }
+    }
+    const list = [];
+    list.push(verificationList[defaultIndex]);
+    list.push(...verificationList.slice(0, defaultIndex));
+    // 不是最后一位
+    if (defaultIndex + 1 !== verificationList.length) {
+      list.push(...verificationList.slice(defaultIndex + 1, verificationList.length + 1));
+    }
+    return list;
+  },
+
   async hello(ctx) {
-    console.log(`${`daily_verification_result_${moment().subtract(1, 'days').startOf('day').format('YYYY_MM_DD')}`}`);
+    const querySql = 'SELECT * FROM data_dict_event WHERE is_deleted=0';
+    DBClient.query(querySql)
+      .then(([res]) => {
+        console.log(res);
+        for (const v of res) {
+          v.definition_val.def_val[0].field_id = 4;
+          const sql = `UPDATE data_dict_event SET definition_val='${JSON.stringify(v.definition_val)}' WHERE id =${v.id}`;
+          DBClient.query(sql);
+        }
+      });
   },
 
   /**
