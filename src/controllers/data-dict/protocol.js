@@ -5,18 +5,33 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 const moment = require('moment');
 
-function ccc(mp, sl) {
-  mp.set(1, 'hello');
-  sl.push(1);
+function ccc(d) {
+  if (d === 2) {
+    return true;
+  }
+  return false;
 }
 
 function bbb(d) {
-  console.log(d);
+  if (d === 1) {
+    return true;
+  }
+  return false;
 }
 
 const Protocol = {
   async hello(ctx) {
-    console.log(`${`daily_verification_result_${moment().subtract(1, 'days').startOf('day').format('YYYY_MM_DD')}`}`);
+    const base64 = 'am95eWllbGksZGF0YV9kaWN0LDE2NTQ0Mzc2MTIsOWYzMzkxOTJmYjg5OTA5NWZhYTU2M2JhMTA4OGU1YzFhMzRlNmMzNgo=';
+    const buff = Buffer.from(base64, 'base64');
+    const token = buff.toString('utf-8');
+    console.log(token.length);
+    const a = 'joyyieli,data_dict,1654437612,9f339192fb899095faa563ba1088e5c1a34e6c36';
+    console.log(a.length);
+    // if (bbb(2)) {
+    // console.log('hhhhhhhh');
+    // } else if (ccc(2)) {
+    // console.log('ccccccccccc');
+    // }
   },
 
   /**
