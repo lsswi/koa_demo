@@ -13,17 +13,18 @@ const VERIFICATION_TYPE = {
 };
 
 async function dumpVerificationResult() {
-  try {
-    await DBClient.transaction(async (transaction) => {
-      // 先建表，同时将其作为分布式锁，如果已经建表说明另一台机器已经在跑定时任务，本机直接return
-      await createAndLock(transaction);
-      // 遍历智研接口所有rule_id
-      await fetchAndDumpRules(transaction);
-    });
-  } catch (err) {
-    console.error(err);
-    return;
-  }
+  // try {
+  //   await DBClient.transaction(async (transaction) => {
+  //     // 先建表，同时将其作为分布式锁，如果已经建表说明另一台机器已经在跑定时任务，本机直接return
+  //     await createAndLock(transaction);
+  //     // 遍历智研接口所有rule_id
+  //     await fetchAndDumpResult(transaction);
+  //   });
+  // } catch (err) {
+  //   console.error(err);
+  //   return;
+  // }
+  console.log(11111111111);
 }
 
 async function createAndLock(transaction) {
@@ -34,7 +35,7 @@ async function createAndLock(transaction) {
     \`verification_type\` smallint DEFAULT NULL,
     \`media_id\` int DEFAULT NULL,
     \`event_id\` int DEFAULT NULL,
-    \`filed_verification_id\` int DEFAULT NULL,
+    \`field_verification_id\` int DEFAULT NULL,
     \`field_id\` int DEFAULT NULL,
     \`hit_nums\` bigint DEFAULT NULL,
     \`conflict_nums\` bigint DEFAULT NULL,
@@ -54,7 +55,7 @@ async function createAndLock(transaction) {
     });
 }
 
-async function fetchAndDumpRules(transaction) {
+async function fetchAndDumpResult(transaction) {
   // 每行信息的obj
   const insertList = [];
   await Promise.all([fetchHitInfo(transaction), fetchConflictInfo()])
@@ -78,17 +79,18 @@ async function fetchAndDumpRules(transaction) {
     .catch((err) => {
       throw err;
     });
+  console.log(insertList);
   // 此时hitInfo已具备所有信息，可以dump到DB里
   await dumpHitAndConflictInfo(insertList, transaction);
 }
 
 async function dumpHitAndConflictInfo(insertList, transaction) {
   const insertValues = [];
-  const totalNums = Math.ceil(insertValues.length / SINGLE_PULL_NUM);
+  const totalNums = Math.ceil(insertList.length / SINGLE_PULL_NUM);
   for (let i = 0; i < totalNums; i++) {
     for (const obj of insertList.slice(i * SINGLE_PULL_NUM, (i + 1) * SINGLE_PULL_NUM)) {
       insertValues.push(`(${obj.rule_id}, ${obj.verification_type}, ${obj.media_id}, ${obj.event_id ? obj.event_id : 0},
-        ${obj.field_verification_id}, ${obj.field_id}, ${obj.hit_nums}, ${obj.conflcit_nums ? obj.conflict_nums : 0})`);
+        ${obj.field_verification_id}, ${obj.field_id}, ${obj.hit_nums}, ${obj.conflict_nums ? obj.conflict_nums : 0})`);
     }
     const insertSql = `INSERT INTO ${`daily_verification_result_${moment().subtract(1, 'days').startOf('day').format('YYYY_MM_DD')}`}
     (rule_id, verification_type, media_id, event_id, field_verification_id, field_id, hit_nums, conflict_nums) VALUES ${insertValues.join(',')}`;
@@ -113,7 +115,7 @@ async function fetchHitInfo(transaction) {
   // rule_id -> {rel_id, verification_type, media_id, event_id(option), fvid, field_id}的映射
   const ruleInfo = new Map();
   // 这里能拉到 rel_id 映射的 fvid, field_id等信息
-  await Promise.All([getRelMediaInfo(relMeidaIDList, transaction), getRelMediaEventInfo(relMeidaEventIDList, transaction)])
+  await Promise.all([getRelMediaInfo(relMeidaIDList, transaction), getRelMediaEventInfo(relMeidaEventIDList, transaction)])
     .then((promiseRes) => {
       // rel_id -> fv_id, field_id, event_id的映射
       const [relMeidaInfo, relMediaEventInfo] = promiseRes;
@@ -121,24 +123,28 @@ async function fetchHitInfo(transaction) {
       for (const [k, v] of relMeidaInfo) {
         const ruleID = relID2RuleID.get(k);
         const hitObj = hitInfo.get(ruleID);
-        ruleInfo.set(ruleID, {
-          rel_id: k,
-          varification_type: v.verification_type,
-          media_id: hitObj.media_id,
-          field_verification_id: v.field_verification_id,
-          field_id: v.field_id,
-        });
+        if (hitObj) {
+          ruleInfo.set(ruleID, {
+            rel_id: k,
+            verification_type: v.verification_type,
+            media_id: hitObj.media_id,
+            field_verification_id: v.field_verification_id,
+            field_id: v.field_id,
+            hit_nums: hitObj.hit_nums,
+          });
+        }
       }
       for (const [k, v] of relMediaEventInfo) {
         const ruleID = relID2RuleID.get(k);
         const hitObj = hitInfo.get(ruleID);
         ruleInfo.set(ruleID, {
           rel_id: k,
-          varification_type: v.verification_type,
+          verification_type: v.verification_type,
           media_id: hitObj.media_id,
           event_id: v.event_id,
           field_verification_id: v.field_verification_id,
           field_id: v.field_id,
+          hit_nums: hitObj.hit_nums,
         });
       }
     })
@@ -159,9 +165,10 @@ async function fetchDataFromZHIYAN(hitInfo, relMeidaIDList, relID2RuleID, relMei
     const [ruleID] = info.cond.tag_set.ri.val;
     const [numObj] = info.detail_data_list;
     const ruleIDInfo = parseRuleID(ruleID);
+    console.log(ruleIDInfo);
     hitInfo.set(ruleID, {
       media_id: ruleIDInfo.media_id,
-      nums: numObj.current,
+      hit_nums: numObj.current,
     });
     if (ruleIDInfo.verification_type === VERIFICATION_TYPE.TYPE_MEDIA) {
       relMeidaIDList.push(ruleIDInfo.rel_id);
@@ -179,9 +186,10 @@ async function fetchDataFromZHIYAN(hitInfo, relMeidaIDList, relID2RuleID, relMei
       const [ruleID] = info.cond.tag_set.ri.val;
       const [numObj] = info.detail_data_list;
       const ruleIDInfo = parseRuleID(ruleID);
+      console.log(ruleIDInfo);
       hitInfo.set(ruleID, {
         media_id: ruleIDInfo.media_id,
-        nums: numObj.current,
+        hit_nums: numObj.current,
       });
       if (ruleIDInfo.verification_type === VERIFICATION_TYPE.TYPE_MEDIA) {
         relMeidaIDList.push(ruleIDInfo.rel_id);
@@ -210,7 +218,7 @@ async function fetchConflictInfo() {
   }
 
   for (let i = 1; i < totalPage; i++) {
-    const req = formZHIYANChartReq('rh', i + 1);
+    const req = formZHIYANChartReq('rc', i + 1);
     const body = await requestZHIYANChartInfo(req);
     for (const info of body.data.chart_info) {
       const [ruleID] = info.cond.tag_set.ri.val;
@@ -228,11 +236,12 @@ async function fetchConflictInfo() {
  */
 async function getRelMediaInfo(relIDList, transaction) {
   const relInfo = new Map();
+  console.log('relIDList: ', relIDList);
   const querySql = `SELECT rel_m_fv.id, rel_m_fv.fvid, fv.field_id FROM
   (SELECT id, field_verification_id as fvid FROM ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION} WHERE is_deleted=0 AND id IN (${relIDList.join(',')})) rel_m_fv
   LEFT JOIN ${TABLE_INFO.TABLE_FIELD_VERIFICATION} fv ON rel_m_fv.fvid = fv.id`;
   await DBClient.query(querySql, { transaction })
-    .then((res) => {
+    .then(([res]) => {
       for (const obj of res) {
         relInfo.set(obj.id, {
           field_verification_id: obj.fvid,
@@ -245,6 +254,7 @@ async function getRelMediaInfo(relIDList, transaction) {
       throw err;
     });
   // 返回一个rel_id -> {fvid, field_id}的map
+  console.log('relInfo: ', relInfo);
   return relInfo;
 }
 
@@ -258,7 +268,7 @@ async function getRelMediaEventInfo(relIDList, transaction) {
   const relInfo = new Map();
   const querySql = `SELECT rel_e_fv.id, rel_e_fv.eid, rel_e_fv.fvid, fv.field_id FROM
   (SELECT id, event_id AS eid, field_verification_id AS fvid FROM ${TABLE_INFO.TABLE_REL_EVENT_FIELD_VERIFICATION} WHERE is_deleted = 0 AND id IN (${relIDList.join(',')})) rel_e_fv
-  LEFT JOIN {$TABLE_INFO.TABLE_FIELD_VERIFICATION} fv ON rel_e_fv.fvid = fv.id`;
+  LEFT JOIN ${TABLE_INFO.TABLE_FIELD_VERIFICATION} fv ON rel_e_fv.fvid = fv.id`;
   await DBClient.query(querySql, { transaction })
     .then(([res]) => {
       for (const obj of res) {
