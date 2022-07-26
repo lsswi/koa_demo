@@ -5,20 +5,6 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 const moment = require('moment');
 
-function ccc(d) {
-  if (d === 2) {
-    return true;
-  }
-  return false;
-}
-
-function bbb(d) {
-  if (d === 1) {
-    return true;
-  }
-  return false;
-}
-
 function parseRuleID(ruleID) {
   const bNum = parseInt(ruleID, 10).toString(2);
   // 二进制
@@ -31,82 +17,6 @@ function parseRuleID(ruleID) {
     media_id: (ruleID >> 16) & 0xffff,
     rel_id: ruleID & 0xffff,
   };
-}
-
-async function c(transaction) {
-  const querySql1 = 'INSERT INTO data_dict_rel_media_event(media_id, event_id ,operator) VALUES(100, 200, \'abc\')';
-  await DBClient.query(querySql1, { transaction });
-}
-
-async function d(transaction) {
-  const querySql = 'SELECT 1';
-  await DBClient.query(querySql, { transaction });
-}
-
-function getRet() {
-  const mp1 = new Map();
-  mp1.set('1', 'ddd');
-  const mp2 = new Map();
-  mp2.set('2', 'ccc');
-  const mp3 = new Map();
-  mp3.set('3', 'bbb');
-  return {
-    mp1,
-    mp2,
-    mp3,
-    name: 'haha',
-  };
-}
-
-function sortConflictRate(arr, tmpObj) {
-  let ret = arr;
-  // 没有
-  if (ret.length === 0) {
-    ret.push(tmpObj);
-    return ret;
-  }
-  for (let i = 0; i < ret.length; i++) {
-    if (i + 1 === ret.length) {
-      if (tmpObj.rate < ret[i].rate) {
-        ret = [...ret, tmpObj];
-      } else {
-        console.log('11111', ret);
-        ret = [...ret.slice(0, i), tmpObj, ret[ret.length - 1]];
-      }
-      return ret;
-    }
-    if (tmpObj.rate > ret[i].rate) {
-      ret = [...ret.slice(0, i), tmpObj, ...ret.slice(i, ret.length)];
-      return ret;
-    }
-    if (tmpObj.rate <= ret[i].rate && tmpObj.rate >= ret[i + 1].rate) {
-      ret = [...ret.slice(0, i + 1), tmpObj, ...ret.slice(i + 1, ret.length)];
-      return ret;
-    }
-  }
-}
-
-function ddaa(arr) {
-  arr.push(123);
-  arr.push(111);
-}
-
-async function queryMediaFvID(mID) {
-  const list = [];
-  const sql = `SELECT field_verification_id FROM data_dict_rel_media_field_verification
-    WHERE is_deleted=0
-    AND media_id=${mID}`;
-  await DBClient.query(sql)
-    .then(([res]) => {
-      for (const obj of res) {
-        list.push(obj.field_verification_id);
-      }
-    })
-    .catch((err) => {
-      console.error(err);
-      throw err;
-    });
-  return list;
 }
 
 const Protocol = {
@@ -131,15 +41,14 @@ const Protocol = {
   },
 
   async hello(ctx) {
-    // const arr = [{ rate: 2 }, { rate: 5 }, { rate: 4 }];
-    // let tmpArr = [];
-    // for (const obj of arr) {
-    //   tmpArr = sortConflictRate(tmpArr, obj);
-    //   console.log(tmpArr);
-    // }
-    // console.log(arr);
-    console.log(await queryMediaFvID(1));
-    console.log(parseRuleID(77310526005));
+    console.log(parseRuleID(111843999800));
+    DBClient.query('SELECT * FROM data_dict_daily_pass_rate')
+      .then(([res]) => {
+        for (const obj of res) {
+          console.log(typeof obj.pass_rate.succ_rate);
+          console.log(obj.pass_rate.succ_rate);
+        }
+      });
   },
 
   /**

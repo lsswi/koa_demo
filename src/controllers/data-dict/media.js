@@ -1,8 +1,20 @@
 const DBLib = require('../../lib/mysql');
 const DBClient = DBLib.getDBPool();
 const { RET, TABLE_INFO } = require('./const');
-const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
+const moment = require('moment');
+const Event = require('./event');
+const { VERIFICATION_TYPE } = require('../../scheduler/data-dict');
+const { rainbow, opts } = require('./rainbow');
+
+const REQUEST_PARAMS = {
+  CREATE: ['protocol_id', 'name', 'desc', 'version', 'version_field_id', 'definition_val', 'verification_list', 'copy_id'],
+  DELETE: ['ids'],
+  QUERY: ['protocol_id'],
+  CREATE_BINDING: ['media_id', 'event_ids'],
+  DELETE_BINDING: ['ids'],
+  QUERY_BINDING: ['media_id'],
+};
 
 const Media = {
   /**
@@ -12,29 +24,23 @@ const Media = {
   async create(ctx) {
     const params = ctx.request.body;
     const ret = RET.OK_RET;
-    if (!checkCreateParams(params)) {
-      return { ret: RET.CODE_PARAM_ERROR, msg: 'params error, proto_id, original_id, name, desc, version, definition_val, remark, verification_list can not be null' };
+    const errMsg = common.checkRequiredParams(params, REQUEST_PARAMS.CREATE);
+    if (errMsg.length > 0) {
+      return { ret: RET.CODE_PARAM_ERROR, msg: errMsg };
     }
 
     try {
-      await common.existProto(TABLE_INFO.TABLE_PROTOCOL, params.proto_id);
-      await common.existVerification(params.verification_list);
-      // original_id !=0 检查一下主数据是否存在
-      if (params.original_id !== 0) {
-        await common.existOriginal(TABLE_INFO.TABLE_MEDIA, params.original_id);
+      await common.existProto(TABLE_INFO.TABLE_PROTOCOL, params.protocol_id);
+      if (params.verification_list.length > 0) {
+        await common.existVerification(params.verification_list);
       }
       if (params.id) {
         await common.existData(TABLE_INFO.TABLE_MEDIA, params.id);
-        // await updateMedia(ctx.session.user.loginname, params);
-        await updateMedia('joyyieli', params);
+        await updateMedia(ctx.session.user.loginname, params);
         ret.data = { id: params.id };
       } else {
-        // original_id=0为创建初始版本，检测一下重复
-        if (params.original_id === 0) {
-          await checkMediaRepetition(params);
-        }
-        // const id = await createMedia(ctx.session.user.loginname, params);
-        const id = await createMedia('joyyieli', params);
+        await checkMediaRepetition(params);
+        const id = await createMedia(ctx.session.user.loginname, params);
         ret.data = { id };
       }
     } catch (err) {
@@ -42,7 +48,6 @@ const Media = {
       console.error(err);
       return RET.UNKNOWN_RET;
     }
-
     return ret;
   },
 
@@ -53,25 +58,24 @@ const Media = {
   async delete(ctx) {
     const params = ctx.request.body;
     const ret = RET.OK_RET;
-    if (!checkDeleteParams(params)) {
-      return { ret: RET.CODE_PARAM_ERROR, msg: 'params error, ids can not be null' };
+    const errMsg = common.checkRequiredParams(params, REQUEST_PARAMS.DELETE);
+    if (errMsg.length > 0) {
+      return { ret: RET.CODE_PARAM_ERROR, msg: errMsg };
     }
 
     try {
-      const ids = params.ids.filter(Number.isFinite);
+      const ids = params.ids.filter(id => Number.isFinite(id) && id !== 0);
       await DBClient.transaction(async (transaction) => {
         // 删除数据源
         await DBClient.query(`UPDATE ${TABLE_INFO.TABLE_MEDIA} SET is_deleted=1 WHERE id IN (:ids)`, {
           replacements: { ids },
           transaction,
         });
-
         // 删除流量-规则绑定
         await DBClient.query(`UPDATE ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE media_id IN (:ids)`, {
           replacements: { ids },
           transaction,
         });
-
         // 删除流量-事件绑定
         await DBClient.query(`UPDATE ${TABLE_INFO.TABLE_REL_MEDIA_EVENT} SET is_deleted=1 WHERE media_id IN (:ids)`, {
           replacements: { ids },
@@ -93,51 +97,48 @@ const Media = {
   async query(ctx) {
     const params = ctx.query;
     const ret = RET.OK_RET;
-    if (!checkQueryParams(params)) {
-      return { ret: RET.CODE_PARAM_ERROR, msg: 'params error, proto_id can not be null' };
+    const errMsg = common.checkRequiredParams(params, REQUEST_PARAMS.QUERY);
+    if (errMsg.length > 0) {
+      return { ret: RET.CODE_PARAM_ERROR, msg: errMsg };
     }
 
     try {
       // total：总数
-      // allMID：所有media_id列表，包含main和sub的
-      // mainMIDList：main的media_id列表，用来查询
+      // mIDList：media_id列表
       // mediaInfo: media_id -> media信息的映射
-      // mainSubIDs: main的media_id对应的subID列表的映射
-      const { total, allMID, mainMIDList, mediaInfo, mainSubIDs } = await queryMedia(params);
-      if (allMID.length === 0) {
+      const { total, mIDList, mediaInfo } = await queryMedia(params);
+      if (mIDList.length === 0) {
         ret.data = { total, list: [] };
         return ret;
       }
-      const mediaObj = await queryMediaField(mediaInfo, allMID);
 
+      const mediaObj = await queryMediaField(mediaInfo, mIDList);
+      const { mediaRate, meidaEventRate, mediaFieldVerificationRate } = await queryPassRateInfo(mIDList);
       // 没有规则的，设置一下基础信息
-      for (const id of allMID) {
-        if (!mediaObj.has(id)) {
-          const event = mediaInfo.get(id);
-          mediaObj.set(id, {
-            id,
-            category: event.category,
-            name: event.name,
-            desc: event.desc,
-            definition_val: event.definition_val,
-            reporting_timing: event.reporting_timing,
-            remark: event.remark,
-            opeartor: event.operator,
-            updated_time: formatTime(event.updated_time),
-          });
+      for (const mID of mIDList) {
+        if (!mediaObj.has(mID)) {
+          const media = mediaInfo.get(mID);
+          const tmpObj = {
+            id: mID,
+            name: media.name,
+            desc: media.desc,
+            version: media.version,
+            version_field_id: media.version_field_id,
+            definition_val: media.definition_val,
+            reporting_timing: media.reporting_timing,
+            operator: media.operator,
+            updated_time: moment(media.updated_time).format('YYYY-MM-DD HH:mm:ss'),
+          };
+          if (mediaRate.has(mID)) tmpObj.pass_rate = mediaRate.get(mID);
+          if (meidaEventRate.has(mID)) tmpObj.event_pass_rate = meidaEventRate.get(mID);
+          mediaObj.set(mID, tmpObj);
+        } else {  // 有规则的设置一下media通过率和media x field_verification_id 通过率
+          setMediaPassRate(mID, mediaObj, mediaRate, meidaEventRate, mediaFieldVerificationRate);
         }
       }
-
-      // 构造children结构数据
+      // 构造最终返回的结构
       const list = [];
-      for (const id of mainMIDList) {
-        if (mainSubIDs.has(id)) {
-          const arr = [];
-          for (const subID of mainSubIDs.get(id)) {
-            arr.push(mediaObj.get(subID));
-          }
-          mediaObj.get(id).children = arr;
-        }
+      for (const id of mIDList) {
         list.push(mediaObj.get(id));
       }
       ret.data = { list, total };
@@ -156,10 +157,10 @@ const Media = {
   async createBinding(ctx) {
     const params = ctx.request.body;
     const ret = RET.OK_RET;
-    // const errMsg = common.checkRequiredParams(params, REQUEST_PARAMS.CREATE_BINDING);
-    // if (errMsg.length > 0) {
-    // return { ret: RET.CODE_PARAM_ERROR, msg: errMsg };
-    // }
+    const errMsg = common.checkRequiredParams(params, REQUEST_PARAMS.CREATE_BINDING);
+    if (errMsg.length > 0) {
+      return { ret: RET.CODE_PARAM_ERROR, msg: errMsg };
+    }
 
     try {
       await common.existData(TABLE_INFO.TABLE_MEDIA, params.media_id);
@@ -183,13 +184,11 @@ const Media = {
             insertList.push(id);
           }
         }
-
         for (const id of existedEID) {
           if (params.event_ids.indexOf(id) === -1) {
             deletedList.push(id);
           }
         }
-
         if (deletedList.length > 0) {
           await DBClient.query(`UPDATE ${TABLE_INFO.TABLE_REL_MEDIA_EVENT} SET is_deleted=1 WHERE media_id=:media_id AND event_id IN (${deletedList.join(',')})`, {
             replacements: { media_id: params.media_id },
@@ -199,7 +198,7 @@ const Media = {
 
         const insertValue = [];
         for (const id of insertList) {
-          insertValue.push(`(${params.media_id}, ${id}, 'joyyieli')`);
+          insertValue.push(`(${params.media_id}, ${id}, '${ctx.session.user.loginname}')`);
         }
         if (insertValue.length > 0) {
           const querySql = `INSERT INTO ${TABLE_INFO.TABLE_REL_MEDIA_EVENT}(media_id, event_id, operator) VALUES${insertValue.join(',')}`;
@@ -224,8 +223,9 @@ const Media = {
   async deleteBinding(ctx) {
     const params = ctx.request.body;
     const ret = RET.OK_RET;
-    if (!checkDeleteBindingParams(params)) {
-      return { ret: RET.CODE_PARAM_ERROR, msg: 'params error, ids can not be null' };
+    const errMsg = common.checkRequiredParams(params, REQUEST_PARAMS.DELETE_BINDING);
+    if (errMsg.length > 0) {
+      return { ret: RET.CODE_PARAM_ERROR, msg: errMsg };
     }
 
     const ids = params.ids.filter(Number.isFinite);
@@ -248,101 +248,173 @@ const Media = {
   async queryBinding(ctx) {
     const params = ctx.query;
     const ret = RET.OK_RET;
-    if (!checkQueryBindingParams(params)) {
-      return { ret: RET.CODE_PARAM_ERROR, msg: 'params error, media_id can not be null' };
+    const errMsg = common.checkRequiredParams(params, REQUEST_PARAMS.QUERY_BINDING);
+    if (errMsg.length > 0) {
+      return { ret: RET.CODE_PARAM_ERROR, msg: errMsg };
     }
-    const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-    const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
+    const { page = 1, size = 10 } = params;
 
-    const replacements = { media_id: params.media_id };
-    const subQuerySql = `SELECT * FROM ${TABLE_INFO.TABLE_REL_MEDIA_EVENT} WHERE is_deleted=0 AND media_id=:media_id`;
-
-    let countSql = `SELECT COUNT(*) as cnt FROM (${subQuerySql}) t1 LEFT JOIN ${TABLE_INFO.TABLE_EVENT} t2 ON t1.event_id=t2.id WHERE t2.is_deleted=0`;
-    let querySql = `SELECT t1.id, t2.name, t2.category, t2.definition_val, t2.operator, t2.updated_time FROM (${subQuerySql}) t1
-      LEFT JOIN ${TABLE_INFO.TABLE_EVENT} t2 ON t1.event_id=t2.id WHERE t2.is_deleted=0`;
-
-    if (params.category !== undefined) {
-      querySql += ' AND category=:category';
-      countSql += ' AND category=:category';
-      replacements.category = params.category;
+    try {
+      // total：总数
+      // eIDList：所有event_id列表，包含main和sub的
+      // eventInfo: event_id -> event信息的映射
+      const { total, eIDList, eventInfo } = await queryBindingEvent(params, page, size);
+      await formEventFieldList(eventInfo, eIDList, params.media_id);
+      const eventObj = await Event.formRetEventInfo(eventInfo, eIDList, params.media_id);
+      const list = [];
+      for (const id of eIDList) {
+        list.push(eventObj.get(id));
+      }
+      ret.data = { list, total };
+    } catch (err) {
+      if (err.ret) return err;
+      console.error(err);
+      return RET.UNKNOWN_RET;
     }
-
-    if (params.query !== undefined && params.query !== '') {
-      querySql += ' AND (t2.name LIKE :fuzzyQuery OR t2.id=:query OR t2.definition_val LIKE :fuzzyQuery)';
-      countSql += ' AND (t2.name LIKE :fuzzyQuery OR t2.id=:query OR t2.definition_val LIKE :fuzzyQuery)';
-      replacements.query = params.query;
-      replacements.fuzzyQuery = `%${params.query}%`;
-    }
-    querySql += ` LIMIT ${(page - 1) * size}, ${size}`;
-
-    await Promise.all([
-      await DBClient.query(querySql, { replacements }),
-      await DBClient.query(countSql, { replacements }),
-    ])
-      .then((promiseRes) => {
-        const [[events], [[queryCount]]] = promiseRes;
-        const list = [];
-        for (const e of events) {
-          list.push({
-            id: e.id,
-            name: e.name,
-            category: e.category,
-            definition_val: e.definition_val,
-            operator: e.operator,
-            updated_time: formatTime(e.updated_time),
-          });
-        }
-        ret.data = { list, total: queryCount.cnt };
-      })
-      .catch((err) => {
-        console.error(err);
-        throw RET.INTERNAL_DB_ERROR_RET;
-      });
     return ret;
   },
 };
 
-function checkCreateParams(params) {
-  if (params.proto_id === undefined || params.original_id === undefined || params.name === undefined || params.desc === undefined
-    || params.version === undefined || params.definition_val === undefined || params.remark === undefined || params.verification_list === undefined) {
-    return false;
+function setMediaPassRate(mID, mediaObj, mediaRate, meidaEventRate, mediaFieldVerificationRate) {
+  const obj = mediaObj.get(mID);
+  if (mediaRate.has(mID)) obj.pass_rate = mediaRate.get(mID);
+  if (meidaEventRate.has(mID)) obj.event_pass_rate = meidaEventRate.get(mID);
+  for (const fieldObj of obj.field_list) {
+    if (!mediaFieldVerificationRate.has(`${mID}_${fieldObj.verification_id}`)) continue;
+    fieldObj.healthy_degree = { fail_reason: [] };
+    const rateInfo = mediaFieldVerificationRate.get(`${mID}_${fieldObj.verification_id}`);
+    if (rateInfo.conflict_rule) {
+      fieldObj.healthy_degree.fail_reason = common.sortConflictRate(fieldObj.healthy_degree.fail_reason, {
+        rate: rateInfo.conflict_rule.rate,
+        name: 'rule',
+        desc: 'desc',
+        hawk_url: common.formHawkRuleIDQueryUrl(rateInfo.conflict_rule.rule_id),
+      });
+    }
+    if (rateInfo.conflict_null) {
+      fieldObj.healthy_degree.fail_reason = common.sortConflictRate(fieldObj.healthy_degree.fail_reason, {
+        rate: rateInfo.conflict_null.rate,
+        name: 'null',
+        desc: 'desc',
+        hawk_url: common.formHawkRuleIDQueryUrl(rateInfo.conflict_null.rule_id),
+      });
+    }
+    if (rateInfo.conflict_type) {
+      fieldObj.healthy_degree.fail_reason = common.sortConflictRate(fieldObj.healthy_degree.fail_reason, {
+        rate: rateInfo.conflict_type.rate,
+        name: 'type',
+        desc: 'desc',
+        hawk_url: common.formHawkRuleIDQueryUrl(rateInfo.conflict_type.rule_id),
+      });
+    }
+    fieldObj.healthy_degree.pass_rate = rateInfo.succ_rate;
   }
-  return true;
 }
 
-function checkDeleteParams(params) {
-  if (params.ids === undefined) {
-    return false;
+async function queryPassRateInfo(mediaIDList) {
+  const mediaRate = new Map();
+  const meidaEventRate = new Map();
+  const mediaFieldVerificationRate = new Map();
+  if (!mediaIDList.length) {
+    return { mediaRate, meidaEventRate, mediaFieldVerificationRate };
   }
-  return true;
+  const sql = `SELECT * FROM data_dict_daily_pass_rate WHERE media_id IN (${mediaIDList.join(',')}) AND data_type IN (1,2,3) AND is_deleted=0`;
+  await DBClient.query(sql)
+    .then(([res]) => {
+      for (const obj of res) {
+        switch (obj.data_type) {
+          case 1:
+            mediaRate.set(obj.media_id, obj.pass_rate.succ_rate);
+            break;
+          case 2:
+            meidaEventRate.set(obj.media_id, obj.pass_rate.succ_rate);
+            break;
+          case 3:
+            mediaFieldVerificationRate.set(`${obj.media_id}_${obj.fvid}`, obj.pass_rate);
+        }
+      }
+    })
+    .catch((err) => {
+      console.error(err);
+      throw RET.INTERNAL_DB_ERROR_RET;
+    });
+  return { mediaRate, meidaEventRate, mediaFieldVerificationRate };
 }
 
-function checkCreateBindingParams(params) {
-  if (params.media_id === undefined || params.event_ids === undefined) {
-    return false;
+async function queryBindingEvent(params, page, size) {
+  const replacements = { media_id: params.media_id };
+  const subQuerySql = `SELECT * FROM ${TABLE_INFO.TABLE_REL_MEDIA_EVENT} WHERE is_deleted=0 AND media_id=:media_id`;
+  let countSql = `SELECT COUNT(*) as cnt FROM (${subQuerySql}) t1 LEFT JOIN ${TABLE_INFO.TABLE_EVENT} t2 ON t1.event_id=t2.id WHERE t2.is_deleted=0`;
+  let querySql = `SELECT t1.id as rel_id, t2.id, t2.name, t2.desc, t2.category, t2.reporting_timing, t2.definition_val, t2.remark, t2.status, t2.updated_time,
+      t1.operator, t1.updated_time as rel_updated_time FROM (${subQuerySql}) t1
+    LEFT JOIN ${TABLE_INFO.TABLE_EVENT} t2
+      ON t1.event_id=t2.id WHERE t2.is_deleted=0`;
+  if (params.category) {
+    querySql += ' AND category=:category';
+    countSql += ' AND category=:category';
+    replacements.category = params.category;
   }
-  return true;
+  if (params.query !== undefined && params.query !== '') {
+    querySql += ' AND (t2.name LIKE :fuzzyQuery OR t2.id=:query OR t2.definition_val LIKE :fuzzyQuery OR t1.operator LIKE :fuzzyQuery)';
+    countSql += ' AND (t2.name LIKE :fuzzyQuery OR t2.id=:query OR t2.definition_val LIKE :fuzzyQuery OR t1.operator LIKE :fuzzyQuery)';
+    replacements.query = params.query;
+    replacements.fuzzyQuery = `%${params.query}%`;
+  }
+  querySql += ` LIMIT ${(page - 1) * size}, ${size}`;
+
+  const eventInfo = new Map();
+  const eIDList = [];
+  let total = 0;
+  await Promise.all([
+    await DBClient.query(querySql, { replacements }),
+    await DBClient.query(countSql, { replacements }),
+  ])
+    .then((promiseRes) => {
+      const [[events], [[queryCount]]] = promiseRes;
+      for (const e of events) {
+        eventInfo.set(e.id, e);
+        eIDList.push(e.id);
+      }
+      total = queryCount.cnt;
+    })
+    .catch((err) => {
+      console.error(err);
+      throw RET.INTERNAL_DB_ERROR_RET;
+    });
+
+  return { total, eIDList, eventInfo };
 }
 
-function checkDeleteBindingParams(params) {
-  if (params.ids === undefined) {
-    return false;
+// 这里绑定事件补充media字段
+async function formEventFieldList(eventInfo, eIDList, mediaID) {
+  const { eventObj } = await this.queryEventField(eventInfo, eIDList);
+  for (const [eID, info] of eventInfo) {
+    if (!eventObj.has(eID)) {
+      eventObj.set(eID, {
+        id: eID,
+        desc: info.desc,
+        category: info.category,
+        name: info.name,
+        definition_val: info.definition_val,
+        reporting_timing: info.reporting_timing,
+        remark: info.remark,
+        operator: info.operator,
+        status: info.status,
+      });
+    }
   }
-  return true;
-}
-
-function checkQueryBindingParams(params) {
-  if (params.media_id === undefined) {
-    return false;
+  // 把media的字段也加上
+  const mediaFieldInfo = await queryMediaFieldInfo(mediaID);
+  for (const [, event] of eventObj) {
+    const tmpCommon = lodash.cloneDeep(mediaFieldInfo);
+    let tmpList = [];
+    if (event.field_list) {
+      tmpList = [...tmpCommon, ...event.field_list];
+    } else {
+      tmpList = [...tmpCommon];
+    }
+    event.field_list = tmpList;
   }
-  return true;
-}
-
-function checkQueryParams(params) {
-  if (params.proto_id === undefined) {
-    return false;
-  }
-  return true;
 }
 
 async function createMedia(operator, params) {
@@ -350,18 +422,17 @@ async function createMedia(operator, params) {
   try {
     await DBClient.transaction(async (transaction) => {
       // 创建流量源数据
-      const querySql = `INSERT INTO ${TABLE_INFO.TABLE_MEDIA}(proto_id, original_id, name, \`desc\`, version, definition_val, md_key, remark, operator)
-        VALUES(:proto_id, :original_id, :name, :desc, :version, :definition_val, MD5(:definition_val), :remark, :operator)`;
+      const querySql = `INSERT INTO ${TABLE_INFO.TABLE_MEDIA}(proto_id, name, \`desc\`, version, version_field_id, definition_val, md_key, operator)
+        VALUES(:proto_id, :name, :desc, :version, :vfid, :definition_val, MD5(:definition_val), :operator)`;
       const [mediaID] = await DBClient.query(querySql, {
         replacements: {
           operator,
-          proto_id: params.proto_id,
-          original_id: params.original_id,
+          proto_id: params.protocol_id,
           name: params.name,
           desc: params.desc,
           version: params.version,
-          definition_val: JSON.stringify(JSON.parse(params.definition_val)),
-          remark: params.remark,
+          vfid: params.version_field_id,
+          definition_val: JSON.stringify(params.definition_val),
         },
       });
       id = mediaID;
@@ -375,6 +446,20 @@ async function createMedia(operator, params) {
       if (insertValue.length > 0) {
         await DBClient.query(insertRelSql + insertValue.join(','), { transaction });
       }
+
+      // 如果是创建版本要复制一下父media绑定的event
+      if (params.copy_id !== 0) {
+        const querySql = 'SELECT event_id FROM data_dict_rel_media_event WHERE is_deleted=0 AND media_id=:id';
+        const [res] = await DBClient.query(querySql, { replacements: { id: params.copy_id }, transaction });
+        const insertValue = [];
+        for (const obj of res) {
+          insertValue.push(`(${id}, ${obj.event_id}, '${operator}')`);
+        }
+        if (insertValue.length > 0) {
+          const insertSql = `INSERT INTO ${TABLE_INFO.TABLE_REL_MEDIA_EVENT}(media_id, event_id, operator) VALUES${insertValue.join(',')}`;
+          await DBClient.query(insertSql, { transaction });
+        }
+      }
     });
   } catch (err) {
     console.error(err);
@@ -386,23 +471,22 @@ async function createMedia(operator, params) {
 async function updateMedia(operator, params) {
   try {
     await DBClient.transaction(async (transaction) => {
-      // 1. 更新流量源数据
-      const querySql = `UPDATE ${TABLE_INFO.TABLE_MEDIA}
-        SET proto_id=:proto_id,original_id=:original_id,name=:name,\`desc\`=:desc,version=:version,definition_val=:definition_val,
-        md_key=MD5(:definition_val),remark=:remark, operator=:operator
-        WHERE id=:id`;
-      await DBClient.query(querySql, {
+      const updateSql = `UPDATE ${TABLE_INFO.TABLE_MEDIA}
+          SET proto_id=:proto_id,name=:name,\`desc\`=:desc,version=:version,version_field_id=:vfid,definition_val=:definition_val,
+            md_key=MD5(:definition_val),operator=:operator
+          WHERE id=:id`;
+      await DBClient.query(updateSql, {
         replacements: {
           operator,
-          proto_id: params.proto_id,
-          original_id: params.original_id,
+          proto_id: params.protocol_id,
           name: params.name,
           desc: params.desc,
           version: params.version,
-          definition_val: JSON.stringify(JSON.parse(params.definition_val)),
-          remark: params.remark,
+          vfid: params.version_field_id,
+          definition_val: JSON.stringify(params.definition_val),
           id: params.id,
         },
+        transaction,
       });
 
       // 构造插入values语句
@@ -411,59 +495,33 @@ async function updateMedia(operator, params) {
         insertValue.push(`(${params.id}, ${rule_id})`);
       }
 
-      if (insertValue.length > 0) {
-        // 2. 全量 ON DUPLICATE KEY UPDATE 插入rel_media_field_verification表，实现没有的新增
-        const insertSql = `INSERT INTO ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION}(media_id, field_verification_id) VALUES${insertValue.join(',')}
-          ON DUPLICATE KEY UPDATE is_deleted=0;`;
-        await DBClient.query(insertSql, { transaction });
+      const deleteSql = `UPDATE ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE media_id=:media_id`;
+      await DBClient.query(deleteSql, { replacements: { media_id: params.id }, transaction });
 
-        // 3. 软删除，media_id所有规则里vid不在传过来的vid的删除
-        const deleteSql = `UPDATE ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION} SET is_deleted=1 WHERE media_id=:mediaID AND field_verification_id NOT IN (:ids)`;
-        await DBClient.query(deleteSql, {
-          replacements: { mediaID: params.id, ids: params.verification_list.filter(Number.isFinite) },
-          transaction,
-        });
+      if (insertValue.length > 0) {
+        // 后全量插入
+        const insertSql = `INSERT INTO ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION}(media_id, field_verification_id) VALUES${insertValue.join(',')}`;
+        await DBClient.query(insertSql, { transaction });
       }
     });
   } catch (err) {
     console.error(err);
     throw RET.INTERNAL_DB_ERROR_RET;
   }
-
-  const querySql = `UPDATE ${TABLE_INFO.TABLE_MEDIA}
-    SET proto_id=:proto_id,original_id=:original_id,name=:name,\`desc\`=:desc,version=:version,definition_val=:definition_val,
-      md_key=MD5(:definition_val),remark=:remark, operator=:operator
-      WHERE id=:id`;
-  await DBClient.query(querySql, { replacements: {
-    proto_id: params.proto_id,
-    original_id: params.original_id,
-    name: params.name,
-    desc: params.desc,
-    version: params.version,
-    definition_val: params.definition_val,
-    remark: params.remark,
-    // operator: ctx.session.user.loginname,
-    operator: 'joyyieli',
-    id: params.id,
-  } })
-    .catch((err) => {
-      console.error(err);
-      throw RET.INTERNAL_DB_ERROR_RET;
-    });
 }
 
+// 定义+版本做唯一区分
 async function checkMediaRepetition(params) {
-  const defJsonFormat = JSON.stringify(JSON.parse(params.definition_val));
-  const checkSql = `SELECT COUNT(*) as cnt FROM ${TABLE_INFO.TABLE_MEDIA} WHERE md_key=MD5(:def_val)`;
-  await DBClient.query(checkSql, { replacements: { def_val: defJsonFormat } })
+  const defJsonFormat = JSON.stringify(params.definition_val);
+  const checkSql = `SELECT COUNT(*) as cnt FROM ${TABLE_INFO.TABLE_MEDIA} WHERE is_deleted =0 AND md_key=MD5(:def_val) AND version=:version`;
+  await DBClient.query(checkSql, { replacements: { def_val: defJsonFormat, version: params.version } })
     .then(([res]) => {
       const [queryCount] = res;
       if (queryCount.cnt > 0) {
-        throw { ret: RET.CODE_EXISTED, msg: `event definition: ${defJsonFormat} has existed` };
+        throw { ret: RET.CODE_EXISTED, msg: `流量定义 ${defJsonFormat} 已存在` };
       }
     })
     .catch((err) => {
-      if (err.ret) throw err;
       console.error(err);
       throw RET.INTERNAL_DB_ERROR_RET;
     });
@@ -486,7 +544,6 @@ async function existEvent(eventIDs) {
       console.error(err);
       throw RET.INTERNAL_DB_ERROR_RET;
     });
-  console.log(existID);
 
   const unexsitedIDs = [];
   for (const id of eventIDs) {
@@ -500,53 +557,25 @@ async function existEvent(eventIDs) {
   }
 }
 
-async function bindMediaEvent(params) {
-  const insertValue = [];
-  console.log(params.event_ids.filter(Number.isFinite));
-  for (const id of params.event_ids.filter(Number.isFinite)) {
-    insertValue.push(`(${params.media_id}, ${id})`);
-  }
-  const querySql = `INSERT INTO ${TABLE_INFO.TABLE_REL_MEDIA_EVENT}(media_id, event_id) VALUES${insertValue.join(',')} ON DUPLICATE KEY UPDATE is_deleted=0`;
-  if (insertValue.length > 0) {
-    await DBClient.query(querySql)
-      .catch((err) => {
-        console.error(err);
-        throw RET.INTERNAL_DB_ERROR_RET;
-      });
-  }
-}
-
 async function queryMedia(params) {
   // 设置参数默认值
-  const page = Object.prototype.hasOwnProperty.call(params, 'page') ? params.page : 1;
-  const size = Object.prototype.hasOwnProperty.call(params, 'size') ? params.size : 10;
+  const { page = 1, size = 10 } = params;
 
   // 查询替换参数
-  const replacements = { proto_id: params.proto_id };
-  let mainQuerySql = `SELECT * FROM ${TABLE_INFO.TABLE_MEDIA} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
-  /**
-   * SELECT COUNT(*) as cnt FROM data_dict_media
-   *    WHERE original_id=0 AND proto_id=1 AND category=0 AND (id=6 OR name LIKE '%6%' OR operator='6')
-   */
-  let countSql = `SELECT COUNT(*) as cnt FROM ${TABLE_INFO.TABLE_MEDIA} WHERE is_deleted=0 AND original_id=0 AND proto_id=:proto_id`;
-  if (params.category !== undefined) {
-    mainQuerySql += ' AND category=:category';
-    countSql += ' AND category=:category';
-    replacements.category = params.category;
-  }
+  const replacements = { proto_id: params.protocol_id };
+  let mainQuerySql = `SELECT * FROM ${TABLE_INFO.TABLE_MEDIA} WHERE is_deleted=0 AND proto_id=:proto_id`;
+  let countSql = `SELECT COUNT(*) as cnt FROM ${TABLE_INFO.TABLE_MEDIA} WHERE is_deleted=0 AND proto_id=:proto_id`;
   if (params.query !== undefined && params.query !== '') {
-    mainQuerySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
-    countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator=:query)';
+    mainQuerySql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator LIKE :fuzzyQuery)';
+    countSql += ' AND (id=:query OR name LIKE :fuzzyQuery OR operator LIKE :fuzzyQuery)';
     replacements.query = params.query;
     replacements.fuzzyQuery = `%${params.query}%`;
   }
-  mainQuerySql += `LIMIT ${(page - 1) * size}, ${size}`;
+  mainQuerySql += ` ORDER BY updated_time DESC LIMIT ${(page - 1) * size}, ${size}`;
 
   let total = 0;
-  // 所有的media_id，main和sub的media_id集合
-  const allMID = [];
-  // main的media_id列表，用来查询所有sub的media_id
-  const mainMIDList = [];
+  // 所有media_id
+  const mIDList = [];
   // media_id -> media信息的映射
   const mediaInfo = new Map();
   await Promise.all([
@@ -557,8 +586,7 @@ async function queryMedia(params) {
       const [[mainMedia], [[queryCount]]] = promiseRes;
       total = queryCount.cnt;
       for (const mainE of mainMedia) {
-        mainMIDList.push(mainE.id);
-        allMID.push(mainE.id);
+        mIDList.push(mainE.id);
         mediaInfo.set(mainE.id, mainE);
       }
     })
@@ -567,58 +595,44 @@ async function queryMedia(params) {
       throw RET.INTERNAL_DB_ERROR_RET;
     });
 
-  if (allMID.length === 0) {
-    return { total, allMID };
+  if (mIDList.length === 0) {
+    return { total, mIDList };
   }
 
-  /**
-   * 查所有主media的所有子media
-   * SELECT * FORM media WHERE is_deleted=0 AND original_id IN (1, 2, 3);
-   */
-  const subQuerySql = `SELECT * FROM ${TABLE_INFO.TABLE_MEDIA} WHERE is_deleted=0 AND original_id IN (:ids)`;
-  const mainSubIDs = new Map();
-  await DBClient.query(subQuerySql, { replacements: { ids: mainMIDList } })
-    .then((res) => {
-      const [subMedia] = res;
-      for (const subM of subMedia) {
-        allMID.push(subM.id);
-        mediaInfo.set(subM.id, subM);
-        if (!mainSubIDs.has(subM.original_id)) {
-          mainSubIDs.set(subM.original_id, [subM.id]);
-        } else {
-          mainSubIDs.get(subM.original_id).push(subM.id);
-        }
-      }
-    })
-    .catch((err) => {
-      console.error(err);
-      throw RET.INTERNAL_DB_ERROR_RET;
-    });
-
-  return { total, allMID, mainMIDList, mediaInfo, mainSubIDs };
+  return { total, mIDList, mediaInfo };
 }
 
-async function queryMediaField(mediaInfo, allMID) {
-/**
+async function queryMediaField(mediaInfo, mIDList) {
+  const mediaObj = new Map();
+  if (mIDList.length === 0) {
+    return mediaObj;
+  }
+  /**
    * 关联查字段信息
    * SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t3.name
    *    FROM (SELECT * FROM rel_media_field_verification WHERE is_deleted=0 AND media_id IN (1,2,3)) t1
    *    LEFT JOIN field_verification t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
    *    LEFT JOIN field t3 ON t2.field_id=t3.id AND t3.is_deleted=0
    */
-  const fieldQuerySql = `SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name
-    FROM (SELECT * FROM ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION} WHERE is_deleted=0 AND media_id IN (${allMID})) t1
-    LEFT JOIN ${TABLE_INFO.TABLE_FIELD_VERIFICATION} t2 ON t1.field_verification_id=t2.id AND t2.is_deleted=0
-    LEFT JOIN ${TABLE_INFO.TABLE_FIELD} t3 ON t2.field_id=t3.id AND t3.is_deleted=0 ORDER BY t1.media_id`;
-
+  const fieldQuerySql = `SELECT t1.media_id, t1.field_verification_id, t2.rule_id, t2.verification_value, t3.name, t3.id as field_id, t3.field_key
+    FROM (
+      SELECT * FROM ${TABLE_INFO.TABLE_REL_MEDIA_FIELD_VERIFICATION} WHERE is_deleted=0 AND media_id IN (${mIDList})
+    ) t1
+      LEFT JOIN ${TABLE_INFO.TABLE_FIELD_VERIFICATION} t2
+        ON t1.field_verification_id=t2.id AND t2.is_deleted=0
+      LEFT JOIN ${TABLE_INFO.TABLE_FIELD} t3
+        ON t2.field_id=t3.id AND t3.is_deleted=0 ORDER BY t1.media_id`;
   // 构造每个返回的media数据
-  const mediaObj = new Map();
   await DBClient.query(fieldQuerySql)
     .then(([rules]) => {
       for (const rule of rules) {
         // rule_id为空说明verification信息被删除，name为空说明field信息被删除，一般不会有这种情况，删除的时候都处理了
         if (rule.rule_id !== null && rule.name !== null) {
-        // mid没有基础数据，构造基础数据；有基础数据说明是校验规则，push到field_list里面
+          /**
+           * 这里首先获取所有media关联的规则数据，然后再对字段规则left join，最后再left join字段基础信息。
+           * 所以对于一个event_id，有可能有多条数据。
+           * 所以对于第一条数据构造完整的结构（基础信息+该条校验规则），对于有重复的event_id就只需push校验规则即可。
+           */
           if (!mediaObj.has(rule.media_id)) {
             const media = mediaInfo.get(rule.media_id);
             const tmpObj = {
@@ -626,13 +640,15 @@ async function queryMediaField(mediaInfo, allMID) {
               name: media.name,
               desc: media.desc,
               version: media.version,
+              version_field_id: media.version_field_id,
               definition_val: media.definition_val,
-              remark: media.remark,
               operator: media.operator,
-              updated_time: formatTime(media.updated_time),
+              updated_time: moment(media.updated_time).format('YYYY-MM-DD HH:mm:ss'),
               field_list: [{
                 verification_id: rule.field_verification_id,
+                field_id: rule.field_id,
                 field_name: rule.name,
+                field_name_en: rule.field_key,
                 rule_id: rule.rule_id,
                 value: rule.verification_value,
               }],
@@ -641,6 +657,7 @@ async function queryMediaField(mediaInfo, allMID) {
           } else {
             mediaObj.get(rule.media_id).field_list.push({
               verification_id: rule.field_verification_id,
+              field_id: rule.field_id,
               field_name: rule.name,
               rule_id: rule.rule_id,
               value: rule.verification_value,
