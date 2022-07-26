@@ -5,28 +5,18 @@ const { DateLib: { formatTime } } = require('../../utils/date');
 const common = require('./common');
 const moment = require('moment');
 
-function ccc(d) {
-  if (d === 2) {
-    return true;
-  }
-  return false;
-}
-
-function bbb(d) {
-  if (d === 1) {
-    return true;
-  }
-  return false;
-}
-
-async function c(transaction) {
-  const querySql1 = 'INSERT INTO data_dict_rel_media_event(media_id, event_id ,operator) VALUES(100, 200, \'abc\')';
-  await DBClient.query(querySql1, { transaction });
-}
-
-async function d(transaction) {
-  const querySql = 'SELECT 1';
-  await DBClient.query(querySql, { transaction });
+function parseRuleID(ruleID) {
+  const bNum = parseInt(ruleID, 10).toString(2);
+  // 二进制
+  const typebNum = bNum.substring(bNum.length - 36, bNum.length - 36 + 4);
+  // 十进制
+  const typeDeNum = parseInt(typebNum, 2);
+  return {
+    rule_id: ruleID,
+    verification_type: typeDeNum,
+    media_id: (ruleID >> 16) & 0xffff,
+    rel_id: ruleID & 0xffff,
+  };
 }
 
 const Protocol = {
