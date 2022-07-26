@@ -51,17 +51,10 @@ const Protocol = {
   },
 
   async hello(ctx) {
-    const base64 = 'am95eWllbGksZGF0YV9kaWN0LDE2NTQ0Mzc2MTIsOWYzMzkxOTJmYjg5OTA5NWZhYTU2M2JhMTA4OGU1YzFhMzRlNmMzNgo=';
-    const buff = Buffer.from(base64, 'base64');
-    const token = buff.toString('utf-8');
-    console.log(token.length);
-    const a = 'joyyieli,data_dict,1654437612,9f339192fb899095faa563ba1088e5c1a34e6c36';
-    console.log(a.length);
-    // if (bbb(2)) {
-    // console.log('hhhhhhhh');
-    // } else if (ccc(2)) {
-    // console.log('ccccccccccc');
-    // }
+    const [res] = await DBClient.query('SELECT media_id FROM data_dict_rel_media_field_verification');
+    for (const obj of res) {
+      console.log(typeof obj.media_id);
+    }
   },
 
   /**
